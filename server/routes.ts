@@ -13,7 +13,9 @@ const IV_LENGTH = 16;
 
 function encrypt(text: string): string {
   const iv = crypto.randomBytes(IV_LENGTH);
-  const cipher = crypto.createCipher('aes-256-cbc', ENCRYPTION_KEY);
+  // Ensure ENCRYPTION_KEY is a proper Buffer
+  const key = Buffer.isBuffer(ENCRYPTION_KEY) ? ENCRYPTION_KEY : crypto.createHash('sha256').update(String(ENCRYPTION_KEY)).digest();
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   return iv.toString('hex') + ':' + encrypted;
@@ -21,9 +23,22 @@ function encrypt(text: string): string {
 
 function decrypt(text: string): string {
   const textParts = text.split(':');
-  const iv = Buffer.from(textParts.shift()!, 'hex');
-  const encryptedText = textParts.join(':');
-  const decipher = crypto.createDecipher('aes-256-cbc', ENCRYPTION_KEY);
+  
+  if (textParts.length !== 2) {
+    throw new Error(`Invalid encrypted format: expected 2 parts, got ${textParts.length}`);
+  }
+  
+  const ivHex = textParts[0];
+  const encryptedText = textParts[1];
+  
+  if (ivHex.length !== IV_LENGTH * 2) {
+    throw new Error(`Invalid IV length: expected ${IV_LENGTH * 2} hex chars, got ${ivHex.length}`);
+  }
+  
+  const iv = Buffer.from(ivHex, 'hex');
+  // Ensure ENCRYPTION_KEY is a proper Buffer
+  const key = Buffer.isBuffer(ENCRYPTION_KEY) ? ENCRYPTION_KEY : crypto.createHash('sha256').update(String(ENCRYPTION_KEY)).digest();
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
   let decrypted = decipher.update(encryptedText, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
@@ -38,12 +53,30 @@ export function registerRoutes(app: Express): Server {
     
     try {
       const settings = await storage.getSettings();
-      if (settings && settings.accessToken) {
-        // Decrypt access token before sending
-        settings.accessToken = decrypt(settings.accessToken);
+      
+      if (!settings) {
+        return res.json(null);
       }
-      res.json(settings);
+      
+      // Always create a fresh copy to avoid any mutation
+      const responseSettings = {
+        id: settings.id,
+        phoneNumberId: settings.phoneNumberId,
+        wabaId: settings.wabaId,
+        accessToken: settings.accessToken,
+        createdBy: settings.createdBy,
+        createdAt: settings.createdAt,
+        updatedAt: settings.updatedAt
+      };
+      
+      // Decrypt access token only in the response copy
+      if (responseSettings.accessToken) {
+        responseSettings.accessToken = decrypt(responseSettings.accessToken);
+      }
+      
+      res.json(responseSettings);
     } catch (error) {
+      console.error("Error fetching settings:", error);
       res.status(500).json({ message: "Failed to fetch settings" });
     }
   });
@@ -54,21 +87,30 @@ export function registerRoutes(app: Express): Server {
     try {
       const settingsData = insertSettingsSchema.parse(req.body);
       
-      // Encrypt access token before storing
-      if (settingsData.accessToken) {
-        settingsData.accessToken = encrypt(settingsData.accessToken);
-      }
+      // Create storage data with encrypted access token
+      const storageData = {
+        phoneNumberId: settingsData.phoneNumberId,
+        wabaId: settingsData.wabaId,
+        accessToken: settingsData.accessToken ? encrypt(settingsData.accessToken) : undefined,
+        createdBy: req.user!.id
+      };
       
-      settingsData.createdBy = req.user!.id;
-      const settings = await storage.createOrUpdateSettings(settingsData);
+      const settings = await storage.createOrUpdateSettings(storageData);
       
-      // Decrypt for response
-      if (settings.accessToken) {
-        settings.accessToken = decrypt(settings.accessToken);
-      }
+      // Create clean response with decrypted access token
+      const responseSettings = {
+        id: settings.id,
+        phoneNumberId: settings.phoneNumberId,
+        wabaId: settings.wabaId,
+        accessToken: settingsData.accessToken, // Use original unencrypted value for response
+        createdBy: settings.createdBy,
+        createdAt: settings.createdAt,
+        updatedAt: settings.updatedAt
+      };
       
-      res.json(settings);
+      res.json(responseSettings);
     } catch (error) {
+      console.error("Error saving settings:", error);
       res.status(400).json({ message: "Invalid settings data" });
     }
   });
