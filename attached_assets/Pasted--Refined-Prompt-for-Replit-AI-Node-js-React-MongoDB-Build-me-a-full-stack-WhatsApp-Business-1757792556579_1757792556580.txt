@@ -1,0 +1,144 @@
+🚀 Refined Prompt for Replit AI (Node.js + React + MongoDB)
+
+Build me a full-stack WhatsApp Business API client webapp with campaign management, using Node.js (Express), React, and MongoDB.
+
+🔑 Requirements
+1. Authentication & Users
+
+Implement JWT-based authentication with secure login/logout.
+
+Role-based access: Admin, Manager, Agent.
+
+User registration only allowed by Admin.
+
+Store user data in MongoDB (hashed passwords).
+
+2. Settings
+
+Page to store/manage WhatsApp Business API credentials:
+
+Phone Number ID
+
+Access Token
+
+WABA ID
+
+Store encrypted in MongoDB.
+
+3. Dashboard
+
+Show campaign stats with charts (Recharts):
+
+Sent messages today
+
+Active campaigns
+
+Failed vs successful messages
+
+Notifications for API errors (e.g., expired token).
+
+4. Message Sending
+
+Form to send single WhatsApp message:
+
+Select from WhatsApp templates (fetched via Graph API).
+
+Support placeholders (e.g., {{name}}).
+
+Free-text messages allowed (session-based).
+
+5. Campaigns
+
+Create/Edit/Delete campaigns:
+
+Upload contacts (CSV/Excel).
+
+Map columns → (Name, Phone, Variables).
+
+Select WhatsApp template.
+
+Assign dynamic placeholders per contact.
+
+Campaign control: Start, Pause, Resume, Stop.
+
+Show progress: Total, Sent, Failed, Pending.
+
+6. Scheduler
+
+Use node-cron or BullMQ (Redis) for scheduling.
+
+Support one-time or recurring schedules (daily/weekly).
+
+Timezone support.
+
+7. Templates
+
+Fetch templates via WhatsApp API (Graph API).
+
+UI for editing template placeholders before sending.
+
+Store commonly used templates in MongoDB.
+
+8. Contacts
+
+MongoDB collection for contacts.
+
+Support tags and groups/segments.
+
+Search/filter contacts.
+
+Bulk upload via CSV/Excel.
+
+9. Logs & Reports
+
+Store all sent messages in MongoDB with status.
+
+Logs view (filter by campaign, contact, status).
+
+Export logs (CSV/Excel).
+
+Show error reasons for failed sends.
+
+10. Tech Stack
+
+Frontend: React + TailwindCSS + Axios
+
+Backend: Node.js + Express
+
+Database: MongoDB (Mongoose ORM)
+
+Scheduler: node-cron or BullMQ (with Redis)
+
+API: WhatsApp Business Cloud API (Meta Graph API)
+
+11. Webhook Integration
+
+Setup Express endpoint to listen for WhatsApp webhooks (delivery reports & replies).
+
+Store incoming replies in MongoDB.
+
+Show them in a “Replies” section in dashboard.
+
+12. UI/UX
+
+Sidebar navigation (Dashboard, Campaigns, Contacts, Templates, Settings, Logs).
+
+Campaign wizard flow (Step 1: Upload contacts → Step 2: Select template → Step 3: Schedule & Launch).
+
+Mobile responsive design.
+
+Use charts for analytics (Recharts).
+
+📦 Deliverables
+
+React frontend with TailwindCSS (dashboard UI, campaign wizard, contacts manager).
+
+Node.js Express backend with REST APIs for campaigns, contacts, templates, logs.
+
+MongoDB models: Users, Campaigns, Contacts, Templates, Messages, Settings.
+
+Working WhatsApp API integration (send messages, fetch templates, handle webhooks).
+
+Scheduler for campaigns (cron/BullMQ).
+
+Documentation (README with setup, .env variables, deployment guide).

@@ -1,0 +1,92 @@
+MongoDB Schema Design
+1. Users
+{
+  _id: ObjectId,
+  name: String,
+  email: { type: String, unique: true },
+  password: String, // hashed with bcrypt
+  role: { type: String, enum: ["admin", "manager", "agent"], default: "agent" },
+  createdAt: Date,
+  updatedAt: Date
+}
+
+2. Settings (WhatsApp API Credentials)
+{
+  _id: ObjectId,
+  phoneNumberId: String,
+  wabaId: String,
+  accessToken: String, // encrypted
+  createdBy: ObjectId, // reference to user
+  createdAt: Date,
+  updatedAt: Date
+}
+
+3. Contacts
+{
+  _id: ObjectId,
+  name: String,
+  phone: { type: String, unique: true },
+  tags: [String], // e.g., ["VIP", "Lead"]
+  groups: [String], // e.g., ["September Campaign"]
+  variables: Object, // dynamic placeholders e.g., { city: "Lahore", product: "Shampoo" }
+  createdAt: Date,
+  updatedAt: Date
+}
+
+4. Templates
+{
+  _id: ObjectId,
+  templateId: String, // Meta Graph API template id
+  name: String,
+  category: String, // marketing, transactional, etc.
+  language: String,
+  components: Array, // body/header/footer/buttons
+  createdAt: Date,
+  updatedAt: Date
+}
+
+5. Campaigns
+{
+  _id: ObjectId,
+  name: String,
+  description: String,
+  status: { type: String, enum: ["draft", "scheduled", "running", "paused", "completed", "stopped"], default: "draft" },
+  templateId: ObjectId, // reference to Templates
+  contacts: [ObjectId], // reference to Contacts
+  schedule: {
+    type: { type: String, enum: ["immediate", "scheduled", "recurring"], default: "immediate" },
+    startTime: Date,
+    recurrence: { type: String, enum: ["daily", "weekly", "monthly", "none"], default: "none" },
+    timezone: String
+  },
+  createdBy: ObjectId, // reference to Users
+  createdAt: Date,
+  updatedAt: Date
+}
+
+6. Messages (Logs)
+{
+  _id: ObjectId,
+  campaignId: ObjectId, // reference to Campaigns
+  contactId: ObjectId, // reference to Contacts
+  templateId: ObjectId, // reference to Templates
+  status: { type: String, enum: ["queued", "sent", "delivered", "read", "failed"], default: "queued" },
+  error: String, // API error if failed
+  sentAt: Date,
+  deliveredAt: Date,
+  readAt: Date,
+  createdAt: Date
+}
+
+7. Replies (Webhook Inbound Messages)
+{
+  _id: ObjectId,
+  contactId: ObjectId, // reference to Contacts
+  messageId: String,
+  text: String,
+  mediaUrl: String,
+  type: { type: String, enum: ["text", "image", "document", "video", "audio"] },
+  receivedAt: Date,
+  campaignId: ObjectId, // optional reference
+  createdAt: Date
+}
