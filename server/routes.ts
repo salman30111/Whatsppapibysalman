@@ -489,7 +489,7 @@ export function registerRoutes(app: Express): Server {
         to: phone,
         type: "template",
         template: {
-          name: template.templateId, // Use the actual WhatsApp template name
+          name: template.name, // Use the template name, not templateId
           language: { code: template.language }, // Use the template's actual language
           components: components
         }
