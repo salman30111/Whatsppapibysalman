@@ -462,7 +462,7 @@ export function registerRoutes(app: Express): Server {
 
       // Get the actual template from database using WhatsApp template ID
       const template = await storage.getTemplateByWhatsAppId(templateId);
-      console.log("Found template:", template ? { id: template.id, templateId: template.templateId, name: template.name } : "NOT FOUND");
+      console.log("Found template:", template ? { id: template.id, templateId: template.templateId, name: template.name, components: template.components } : "NOT FOUND");
       
       if (!template) {
         return res.status(400).json({ message: "Template not found" });
@@ -472,6 +472,16 @@ export function registerRoutes(app: Express): Server {
       
       // Build template components based on the actual template structure
       const components = [];
+      
+      // Check if template has header with media
+      const headerComponent = template.components?.find(c => c.type === "HEADER");
+      if (headerComponent && (headerComponent.format === "VIDEO" || headerComponent.format === "IMAGE")) {
+        console.log("Template has media header:", headerComponent);
+        return res.status(400).json({ 
+          message: `This template requires ${headerComponent.format.toLowerCase()} media. Media templates are not yet supported in this interface.` 
+        });
+      }
+      
       if (parameters && parameters.length > 0 && template.components) {
         // Find body component and add parameters to it
         const bodyComponent = template.components.find(c => c.type === "BODY");
