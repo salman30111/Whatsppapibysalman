@@ -15,6 +15,7 @@ import { insertContactSchema, type Contact, type InsertContact } from "@shared/s
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
+import { CSVImportDialog } from "@/components/contacts/csv-import-dialog";
 
 const contactFormSchema = insertContactSchema.extend({
   tagsString: z.string().optional(),
@@ -26,6 +27,7 @@ type ContactFormData = z.infer<typeof contactFormSchema>;
 export default function Contacts() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showCSVImportDialog, setShowCSVImportDialog] = useState(false);
   const { toast } = useToast();
 
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
@@ -117,7 +119,11 @@ export default function Contacts() {
               <p className="text-sm text-muted-foreground">Manage your WhatsApp contacts and groups</p>
             </div>
             <div className="flex items-center space-x-3">
-              <Button variant="outline" data-testid="button-bulk-upload">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowCSVImportDialog(true)}
+                data-testid="button-bulk-upload"
+              >
                 <Upload className="h-4 w-4 mr-2" />
                 Bulk Upload
               </Button>
@@ -310,6 +316,12 @@ export default function Contacts() {
             </div>
           )}
         </div>
+        
+        {/* CSV Import Dialog */}
+        <CSVImportDialog 
+          open={showCSVImportDialog} 
+          onOpenChange={setShowCSVImportDialog}
+        />
       </main>
     </div>
   );
