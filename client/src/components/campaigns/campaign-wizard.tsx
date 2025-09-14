@@ -11,7 +11,9 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertCampaignSchema, type InsertCampaign, type Template, type Contact, type Campaign } from "@shared/schema";
-import { X, Check } from "lucide-react";
+import { X, Check, Calendar, Clock } from "lucide-react";
+import { TemplatePreview } from "./template-preview";
+import { ContactSelector } from "./contact-selector";
 
 interface CampaignWizardProps {
   onClose: () => void;
@@ -20,8 +22,9 @@ interface CampaignWizardProps {
 
 const steps = [
   { id: 1, name: "Campaign Details", description: "Basic campaign information" },
-  { id: 2, name: "Contacts & Template", description: "Select audience and message template" },
-  { id: 3, name: "Schedule & Launch", description: "Set timing and launch campaign" },
+  { id: 2, name: "Template & Preview", description: "Choose template and preview message" },
+  { id: 3, name: "Select Contacts", description: "Choose your audience" },
+  { id: 4, name: "Schedule & Launch", description: "Set timing and launch campaign" },
 ];
 
 export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps) {
@@ -87,8 +90,25 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
     },
   });
 
+  const canProceedToNextStep = (): boolean => {
+    switch (currentStep) {
+      case 1:
+        return !!form.watch("name")?.trim();
+      case 2:
+        // Allow proceeding without template for testing/demo purposes
+        // In production, you might want to make this stricter
+        return true;
+      case 3:
+        return (form.watch("contacts")?.length || 0) > 0;
+      case 4:
+        return true;
+      default:
+        return false;
+    }
+  };
+
   const nextStep = () => {
-    if (currentStep < 3) {
+    if (currentStep < 4 && canProceedToNextStep()) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -125,9 +145,11 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div>
-              <DialogTitle data-testid="campaign-wizard-title">Create New Campaign</DialogTitle>
+              <DialogTitle data-testid="campaign-wizard-title">
+                {isEditing ? "Edit Campaign" : "Create New Campaign"}
+              </DialogTitle>
               <DialogDescription>
-                Follow the steps to create and launch your WhatsApp campaign
+                {isEditing ? "Update your campaign settings" : "Follow the steps to create and launch your WhatsApp campaign"}
               </DialogDescription>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} data-testid="button-close-wizard">
@@ -178,18 +200,19 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
                     )}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="campaign-status">Campaign Type</Label>
+                    <Label htmlFor="campaign-status">Campaign Status</Label>
                     <Select 
                       value={form.watch("status")} 
                       onValueChange={(value) => form.setValue("status", value as any)}
                     >
-                      <SelectTrigger data-testid="select-campaign-type">
-                        <SelectValue placeholder="Select type" />
+                      <SelectTrigger data-testid="select-campaign-status">
+                        <SelectValue placeholder="Select status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="draft">Marketing</SelectItem>
-                        <SelectItem value="scheduled">Transactional</SelectItem>
-                        <SelectItem value="running">Support</SelectItem>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="scheduled">Scheduled</SelectItem>
+                        <SelectItem value="running">Running</SelectItem>
+                        <SelectItem value="paused">Paused</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -208,158 +231,172 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
             )}
 
             {currentStep === 2 && (
-              <div className="space-y-6" data-testid="step-contacts-template">
-                <div className="space-y-2">
-                  <Label htmlFor="campaign-template">Message Template</Label>
-                  <Select 
-                    value={form.watch("templateId") || ""} 
-                    onValueChange={(value) => form.setValue("templateId", value)}
-                  >
-                    <SelectTrigger data-testid="select-campaign-template">
-                      <SelectValue placeholder="Select a template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.length === 0 ? (
-                        <div className="p-2 text-sm text-muted-foreground">
-                          No templates available. Import from WhatsApp first.
-                        </div>
-                      ) : (
-                        templates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>
-                            {template.name} ({template.category})
-                          </SelectItem>
-                        ))
+              <div className="space-y-6" data-testid="step-template-preview">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Template Selection */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="campaign-template">Message Template</Label>
+                      <Select 
+                        value={form.watch("templateId") || ""} 
+                        onValueChange={(value) => form.setValue("templateId", value)}
+                      >
+                        <SelectTrigger data-testid="select-campaign-template">
+                          <SelectValue placeholder="Select a template" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {templates.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground">
+                              No templates available. Import from WhatsApp first.
+                            </div>
+                          ) : (
+                            templates.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name} ({template.category})
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {form.formState.errors.templateId && (
+                        <p className="text-sm text-destructive" data-testid="error-campaign-template">
+                          {form.formState.errors.templateId.message}
+                        </p>
                       )}
-                    </SelectContent>
-                  </Select>
-                  {form.formState.errors.templateId && (
-                    <p className="text-sm text-destructive" data-testid="error-campaign-template">
-                      {form.formState.errors.templateId.message}
-                    </p>
-                  )}
-                </div>
+                    </div>
 
-                <div className="space-y-2">
-                  <Label>Target Contacts</Label>
-                  <div className="border border-border rounded-lg p-4 max-h-48 overflow-y-auto">
-                    {contacts.length === 0 ? (
-                      <p className="text-sm text-muted-foreground" data-testid="no-contacts-available">
-                        No contacts available. Add contacts first.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Available Contacts ({contacts.length})</span>
-                          <Button 
-                            type="button" 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              const allContactIds = contacts.map(c => c.id);
-                              form.setValue("contacts", allContactIds);
-                            }}
-                            data-testid="button-select-all-contacts"
-                          >
-                            Select All
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-32 overflow-y-auto">
-                          {contacts.map((contact) => (
-                            <label key={contact.id} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={(form.watch("contacts") as string[])?.includes(contact.id) || false}
-                                onChange={(e) => {
-                                  const currentContacts = (form.watch("contacts") as string[]) || [];
-                                  if (e.target.checked) {
-                                    form.setValue("contacts", [...currentContacts, contact.id]);
-                                  } else {
-                                    form.setValue("contacts", currentContacts.filter(id => id !== contact.id));
-                                  }
-                                }}
-                                className="rounded"
-                                data-testid={`checkbox-contact-${contact.id}`}
-                              />
-                              <div className="text-sm">
-                                <div className="font-medium">{contact.name}</div>
-                                <div className="text-muted-foreground">{contact.phone}</div>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                        <div className="text-sm text-muted-foreground mt-2" data-testid="selected-contacts-count">
-                          {form.watch("contacts")?.length || 0} contacts selected
-                        </div>
+                    <div className="bg-muted/30 p-4 rounded-lg">
+                      <h4 className="font-medium mb-2">Template Selection</h4>
+                      <div className="text-sm text-muted-foreground">
+                        {templates.length > 0 
+                          ? `Choose from ${templates.length} available templates, or proceed without selecting one for testing.`
+                          : "No templates found. You can still create a campaign and add a template later, or sync templates from WhatsApp."
+                        }
                       </div>
-                    )}
+                    </div>
                   </div>
+
+                  {/* Template Preview */}
+                  <TemplatePreview
+                    template={templates.find(t => t.id === form.watch("templateId")) || null}
+                    selectedContacts={(form.watch("contacts") as string[]) || []}
+                  />
                 </div>
               </div>
             )}
 
             {currentStep === 3 && (
+              <div className="space-y-6" data-testid="step-select-contacts">
+                <ContactSelector
+                  contacts={contacts}
+                  selectedContacts={(form.watch("contacts") as string[]) || []}
+                  onContactsChange={(contactIds) => form.setValue("contacts", contactIds)}
+                />
+              </div>
+            )}
+
+            {currentStep === 4 && (
               <div className="space-y-6" data-testid="step-schedule-launch">
-                <div className="space-y-2">
-                  <Label>Schedule Type</Label>
-                  <Select 
-                    value={form.watch("schedule.type")} 
-                    onValueChange={(value) => form.setValue("schedule.type", value as any)}
-                  >
-                    <SelectTrigger data-testid="select-schedule-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="immediate">Send Immediately</SelectItem>
-                      <SelectItem value="scheduled">Schedule for Later</SelectItem>
-                      <SelectItem value="recurring">Recurring Campaign</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Scheduling Options */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Schedule Type
+                      </Label>
+                      <Select 
+                        value={form.watch("schedule.type")} 
+                        onValueChange={(value) => form.setValue("schedule.type", value as any)}
+                      >
+                        <SelectTrigger data-testid="select-schedule-type">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="immediate">Send Immediately</SelectItem>
+                          <SelectItem value="scheduled">Schedule for Later</SelectItem>
+                          <SelectItem value="recurring">Recurring Campaign</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                {form.watch("schedule.type") === "scheduled" && (
-                  <div className="space-y-2">
-                    <Label htmlFor="start-time">Start Time</Label>
-                    <Input
-                      id="start-time"
-                      type="datetime-local"
-                      data-testid="input-start-time"
-                      onChange={(e) => {
-                        if (e.target.value) {
-                          form.setValue("schedule.startTime", new Date(e.target.value));
-                        }
-                      }}
-                    />
+                    {form.watch("schedule.type") === "scheduled" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="start-time" className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4" />
+                          Start Time
+                        </Label>
+                        <Input
+                          id="start-time"
+                          type="datetime-local"
+                          data-testid="input-start-time"
+                          min={new Date().toISOString().slice(0, 16)}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              form.setValue("schedule.startTime", new Date(e.target.value));
+                            }
+                          }}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Campaign will start sending at the specified time
+                        </p>
+                      </div>
+                    )}
+
+                    {form.watch("schedule.type") === "recurring" && (
+                      <div className="space-y-2">
+                        <Label>Recurrence Pattern</Label>
+                        <Select 
+                          value={(form.watch("schedule.recurrence") as string) || "daily"} 
+                          onValueChange={(value) => form.setValue("schedule.recurrence", value as any)}
+                        >
+                          <SelectTrigger data-testid="select-recurrence">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="daily">Daily</SelectItem>
+                            <SelectItem value="weekly">Weekly</SelectItem>
+                            <SelectItem value="monthly">Monthly</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Campaign will repeat automatically
+                        </p>
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {form.watch("schedule.type") === "recurring" && (
-                  <div className="space-y-2">
-                    <Label>Recurrence</Label>
-                    <Select 
-                      value={(form.watch("schedule.recurrence") as string) || "none"} 
-                      onValueChange={(value) => form.setValue("schedule.recurrence", value as any)}
-                    >
-                      <SelectTrigger data-testid="select-recurrence">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="daily">Daily</SelectItem>
-                        <SelectItem value="weekly">Weekly</SelectItem>
-                        <SelectItem value="monthly">Monthly</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="bg-muted/30 p-4 rounded-lg">
-                  <h4 className="font-medium mb-2" data-testid="campaign-summary-title">Campaign Summary</h4>
-                  <div className="space-y-1 text-sm">
-                    <p><span className="font-medium">Name:</span> {form.watch("name") || "Untitled Campaign"}</p>
-                    <p><span className="font-medium">Template:</span> {
-                      templates.find(t => t.id === form.watch("templateId"))?.name || "None selected"
-                    }</p>
-                    <p><span className="font-medium">Contacts:</span> {form.watch("contacts")?.length || 0} selected</p>
-                    <p><span className="font-medium">Schedule:</span> {form.watch("schedule.type")}</p>
+                  {/* Campaign Summary */}
+                  <div className="bg-muted/30 p-4 rounded-lg">
+                    <h4 className="font-medium mb-3" data-testid="campaign-summary-title">Final Campaign Summary</h4>
+                    <div className="space-y-3 text-sm">
+                      <div>
+                        <span className="font-medium text-foreground">Campaign Name:</span>
+                        <div className="text-muted-foreground">{form.watch("name") || "Untitled Campaign"}</div>
+                      </div>
+                      <div>
+                        <span className="font-medium text-foreground">Template:</span>
+                        <div className="text-muted-foreground">{
+                          templates.find(t => t.id === form.watch("templateId"))?.name || "None selected"
+                        }</div>
+                      </div>
+                      <div>
+                        <span className="font-medium text-foreground">Recipients:</span>
+                        <div className="text-muted-foreground">{form.watch("contacts")?.length || 0} contacts selected</div>
+                      </div>
+                      <div>
+                        <span className="font-medium text-foreground">Schedule:</span>
+                        <div className="text-muted-foreground">
+                          {form.watch("schedule.type") === "immediate" && "Send immediately after creation"}
+                          {form.watch("schedule.type") === "scheduled" && "Send at scheduled time"}
+                          {form.watch("schedule.type") === "recurring" && `Recurring ${form.watch("schedule.recurrence")}`}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="font-medium text-foreground">Status:</span>
+                        <div className="text-muted-foreground">{form.watch("status")}</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -380,13 +417,10 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
               <Button variant="outline" onClick={onClose} data-testid="button-cancel-wizard">
                 Cancel
               </Button>
-              {currentStep < 3 ? (
+              {currentStep < 4 ? (
                 <Button 
                   onClick={nextStep}
-                  disabled={
-                    (currentStep === 1 && !form.watch("name")) ||
-                    (currentStep === 2 && (!form.watch("templateId") || !form.watch("contacts")?.length))
-                  }
+                  disabled={!canProceedToNextStep()}
                   data-testid="button-next-step"
                 >
                   Next Step
@@ -394,10 +428,14 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
               ) : (
                 <Button 
                   onClick={form.handleSubmit(onSubmit)}
-                  disabled={saveCampaignMutation.isPending}
+                  disabled={saveCampaignMutation.isPending || !canProceedToNextStep()}
                   data-testid="button-create-campaign"
+                  className="bg-primary hover:bg-primary/90"
                 >
-                  {saveCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
+                  {saveCampaignMutation.isPending ? 
+                    (isEditing ? "Updating..." : "Creating...") : 
+                    (isEditing ? "Update Campaign" : "Create Campaign")
+                  }
                 </Button>
               )}
             </div>

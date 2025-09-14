@@ -82,6 +82,108 @@ export class MemStorage implements IStorage {
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
     });
+    
+    // Add demo templates for testing
+    this.initializeDemoData();
+  }
+
+  private initializeDemoData() {
+    // Demo template 1 - Welcome message
+    const template1: Template = {
+      id: randomUUID(),
+      templateId: "welcome_template",
+      name: "Welcome Message",
+      category: "marketing",
+      language: "en",
+      components: [
+        {
+          type: "HEADER",
+          format: "TEXT",
+          text: "Welcome to Our Service!"
+        },
+        {
+          type: "BODY",
+          text: "Hello {{name}}, thank you for joining us! We're excited to have you as part of our community."
+        },
+        {
+          type: "FOOTER",
+          text: "Need help? Reply to this message anytime."
+        }
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Demo template 2 - Order confirmation
+    const template2: Template = {
+      id: randomUUID(),
+      templateId: "order_confirmation",
+      name: "Order Confirmation", 
+      category: "utility",
+      language: "en",
+      components: [
+        {
+          type: "HEADER",
+          format: "TEXT",
+          text: "Order Confirmed"
+        },
+        {
+          type: "BODY",
+          text: "Hi {{name}}, your order #{{order_id}} has been confirmed and will be delivered by {{delivery_date}}."
+        },
+        {
+          type: "BUTTONS",
+          buttons: [
+            { type: "URL", text: "Track Order", url: "https://example.com/track" },
+            { type: "PHONE_NUMBER", text: "Call Support", phone_number: "+1234567890" }
+          ]
+        }
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Demo template 3 - Appointment reminder
+    const template3: Template = {
+      id: randomUUID(),
+      templateId: "appointment_reminder",
+      name: "Appointment Reminder",
+      category: "utility", 
+      language: "en",
+      components: [
+        {
+          type: "BODY",
+          text: "Hi {{name}}, this is a reminder that you have an appointment scheduled for {{date}} at {{time}}. Please reply CONFIRM to confirm or RESCHEDULE to change your appointment."
+        },
+        {
+          type: "BUTTONS",
+          buttons: [
+            { type: "QUICK_REPLY", text: "CONFIRM" },
+            { type: "QUICK_REPLY", text: "RESCHEDULE" }
+          ]
+        }
+      ],
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    this.templates.set(template1.id, template1);
+    this.templates.set(template2.id, template2);
+    this.templates.set(template3.id, template3);
+
+    // Add a demo contact for testing
+    const demoContact: Contact = {
+      id: randomUUID(),
+      name: "John Demo",
+      phone: "+1234567890",
+      tags: ["demo", "test"],
+      groups: ["customers"],
+      variables: { company: "Demo Corp", plan: "Premium" },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    this.contacts.set(demoContact.id, demoContact);
   }
 
   // Users

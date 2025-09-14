@@ -5,7 +5,8 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { 
   insertContactSchema, insertTemplateSchema, insertCampaignSchema, 
-  insertMessageSchema, insertReplySchema, insertSettingsSchema 
+  insertMessageSchema, insertReplySchema, insertSettingsSchema,
+  type Message
 } from "@shared/schema";
 import crypto from "crypto";
 import { getNotificationService } from "./notifications";
@@ -260,7 +261,28 @@ export function registerRoutes(app: Express): Server {
     
     try {
       // Validate request body
-      const updateData = insertCampaignSchema.partial().parse(req.body);
+      const validatedData = insertCampaignSchema.partial().parse(req.body);
+      
+      // Ensure contacts is properly typed as string array if present and schedule is properly typed
+      const updateData = {
+        ...validatedData,
+        contacts: validatedData.contacts && Array.isArray(validatedData.contacts) 
+          ? validatedData.contacts.map(String) as string[]
+          : validatedData.contacts,
+        schedule: validatedData.schedule ? {
+          ...validatedData.schedule,
+          type: validatedData.schedule.type as "immediate" | "scheduled" | "recurring",
+          startTime: validatedData.schedule.startTime && 
+            (typeof validatedData.schedule.startTime === 'string' || 
+             typeof validatedData.schedule.startTime === 'number' ||
+             validatedData.schedule.startTime instanceof Date) 
+            ? new Date(validatedData.schedule.startTime as string | number | Date) 
+            : undefined,
+          recurrence: validatedData.schedule.recurrence as "daily" | "weekly" | "monthly" | "none" | undefined,
+          timezone: validatedData.schedule.timezone as string | undefined
+        } : validatedData.schedule
+      };
+      
       const campaign = await storage.updateCampaign(req.params.id, updateData);
       if (!campaign) return res.status(404).json({ message: "Campaign not found" });
       
@@ -544,13 +566,18 @@ export function registerRoutes(app: Express): Server {
                     const notificationService = getNotificationService(app);
                     if (contact) {
                       // Notify all users for now - could be more specific based on campaign ownership
-                      notificationService.notifyAll('incoming_reply', {
-                        replyId: replyData.messageId,
-                        contactName: contact.name,
-                        contactPhone: contact.phone,
-                        text: replyData.text,
-                        type: replyData.type,
-                        receivedAt: replyData.receivedAt
+                      notificationService.sendToAll({
+                        type: 'info',
+                        title: 'New Reply Received',
+                        message: `New reply from ${contact.name} (${contact.phone})`,
+                        data: {
+                          replyId: replyData.messageId,
+                          contactName: contact.name,
+                          contactPhone: contact.phone,
+                          text: replyData.text,
+                          messageType: replyData.type,
+                          receivedAt: replyData.receivedAt
+                        }
                       });
                     }
                   } catch (notifError) {
@@ -597,14 +624,19 @@ export function registerRoutes(app: Express): Server {
                     // Send real-time notification for delivery status
                     try {
                       const notificationService = getNotificationService(app);
-                      notificationService.notifyAll('delivery_status', {
-                        messageId: message.id,
-                        whatsappMessageId: status.id,
-                        status: status.status,
-                        timestamp: statusTimestamp,
-                        campaignId: message.campaignId,
-                        contactId: message.contactId,
-                        error: updates.error
+                      notificationService.sendToAll({
+                        type: status.status === 'failed' ? 'error' : 'info',
+                        title: 'Message Status Update',
+                        message: `Message ${status.status}`,
+                        data: {
+                          messageId: message.id,
+                          whatsappMessageId: status.id,
+                          status: status.status,
+                          timestamp: statusTimestamp,
+                          campaignId: message.campaignId,
+                          contactId: message.contactId,
+                          error: updates.error
+                        }
                       });
                     } catch (notifError) {
                       console.error('Failed to send delivery notification:', notifError);
