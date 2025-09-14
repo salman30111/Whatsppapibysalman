@@ -11,8 +11,18 @@ import {
 import crypto from "crypto";
 import { getNotificationService } from "./notifications";
 import { sessionMiddleware } from "./auth";
+import multer from "multer";
+import FormData from "form-data";
+import axios from "axios";
+import { createReadStream } from "fs";
 
-const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32);
+// ENCRYPTION_KEY must be set in environment variables for production
+if (!process.env.ENCRYPTION_KEY) {
+  console.error("CRITICAL: ENCRYPTION_KEY environment variable is required for data persistence");
+  console.error("Generate one with: node -e \"console.log(crypto.randomBytes(32).toString('hex'))\"");
+  process.exit(1);
+}
+const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY, 'hex');
 const IV_LENGTH = 16;
 
 function encrypt(text: string): string {
@@ -223,6 +233,103 @@ export function registerRoutes(app: Express): Server {
       res.json(data.data || []);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch WhatsApp templates" });
+    }
+  });
+
+  // Configure multer for file uploads
+  const upload = multer({
+    dest: 'uploads/',
+    limits: {
+      fileSize: 16 * 1024 * 1024 // 16MB limit for WhatsApp media
+    },
+    fileFilter: (req, file, cb) => {
+      // Accept image, video, audio, and document files
+      const allowedTypes = [
+        'image/jpeg', 'image/png',
+        'video/mp4', 'video/3gpp',
+        'audio/aac', 'audio/mp4', 'audio/mpeg', 'audio/amr', 'audio/ogg',
+        'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/plain', 'image/webp'
+      ];
+      
+      if (allowedTypes.includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error('Unsupported file type'));
+      }
+    }
+  });
+
+  // Media upload endpoint for WhatsApp
+  app.post("/api/media/upload", upload.single('file'), async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const settings = await storage.getSettings();
+      if (!settings || !settings.accessToken || !settings.phoneNumberId) {
+        return res.status(400).json({ message: "WhatsApp API credentials not configured" });
+      }
+
+      const accessToken = decrypt(settings.accessToken);
+      
+      // Create form data for WhatsApp upload
+      const formData = new FormData();
+      formData.append('file', createReadStream(req.file.path), {
+        filename: req.file.originalname,
+        contentType: req.file.mimetype
+      });
+      formData.append('messaging_product', 'whatsapp');
+
+      console.log(`Uploading ${req.file.originalname} (${req.file.mimetype}) to WhatsApp...`);
+
+      // Upload to WhatsApp Media API
+      const response = await axios.post(
+        `https://graph.facebook.com/v18.0/${settings.phoneNumberId}/media`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            ...formData.getHeaders()
+          }
+        }
+      );
+
+      console.log('WhatsApp media upload response:', response.data);
+
+      // Clean up uploaded file
+      const fs = await import('fs');
+      fs.unlinkSync(req.file.path);
+
+      res.json({
+        mediaId: response.data.id,
+        fileName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        fileSize: req.file.size
+      });
+
+    } catch (error: any) {
+      console.error('Media upload error:', error.response?.data || error.message);
+      
+      // Clean up file if upload failed
+      if (req.file) {
+        try {
+          const fs = await import('fs');
+          fs.unlinkSync(req.file.path);
+        } catch (cleanupError) {
+          console.error('File cleanup error:', cleanupError);
+        }
+      }
+      
+      res.status(500).json({ 
+        message: "Failed to upload media", 
+        error: error.response?.data?.error?.message || error.message 
+      });
     }
   });
 
@@ -441,10 +548,10 @@ export function registerRoutes(app: Express): Server {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {
-      const { phone, templateId, parameters, mediaUrl } = req.body;
+      const { phone, templateId, parameters, mediaId } = req.body;
       
       // Debug logging
-      console.log("Send message request:", { phone, templateId, parameters, mediaUrl });
+      console.log("Send message request:", { phone, templateId, parameters, mediaId });
       
       const settings = await storage.getSettings();
       if (!settings || !settings.accessToken || !settings.phoneNumberId) {
@@ -468,25 +575,25 @@ export function registerRoutes(app: Express): Server {
       // Build template components based on the actual template structure
       const components = [];
       
-      // Handle header with media (VIDEO or IMAGE)
+      // Handle header with media (VIDEO, IMAGE, or DOCUMENT)
       const headerComponent = template.components?.find(c => c.type === "HEADER");
-      if (headerComponent && (headerComponent.format === "VIDEO" || headerComponent.format === "IMAGE")) {
+      if (headerComponent && (headerComponent.format === "VIDEO" || headerComponent.format === "IMAGE" || headerComponent.format === "DOCUMENT")) {
         console.log("Template has media header:", headerComponent);
         
-        if (!mediaUrl) {
+        if (!mediaId) {
           return res.status(400).json({ 
-            message: `This template requires a ${headerComponent.format.toLowerCase()} URL. Please provide a media URL.` 
+            message: `This template requires a ${headerComponent.format.toLowerCase()} file. Please upload a media file first.` 
           });
         }
         
-        // Add header component with media
+        // Add header component with media ID
         const mediaType = headerComponent.format.toLowerCase();
         components.push({
           type: "header",
           parameters: [{
             type: mediaType,
             [mediaType]: {
-              link: mediaUrl
+              id: mediaId
             }
           }]
         });
@@ -529,6 +636,28 @@ export function registerRoutes(app: Express): Server {
 
       if (!response.ok) {
         const error = await response.json();
+        console.log("WhatsApp API error response:", error);
+        
+        // Log failed message for tracking
+        try {
+          const contact = await storage.getContactByPhone(phone);
+          if (contact) {
+            const messageData = insertMessageSchema.parse({
+              contactId: contact.id,
+              templateId: template.id,
+              whatsappMessageId: null,
+              status: "failed",
+              error: error.error?.message || `WhatsApp API error: ${response.statusText}`,
+              sentAt: new Date(),
+            });
+            
+            await storage.createMessage(messageData);
+            console.log("Failed message logged to database");
+          }
+        } catch (logError) {
+          console.error("Failed to log error message:", logError);
+        }
+        
         throw new Error(error.error?.message || `WhatsApp API error: ${response.statusText}`);
       }
 

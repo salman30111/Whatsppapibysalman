@@ -9,7 +9,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Send, Zap } from "lucide-react";
+import { Send, Zap, Upload, FileIcon } from "lucide-react";
+import { useState, useRef } from "react";
 import { z } from "zod";
 import type { Template } from "@shared/schema";
 
@@ -17,22 +18,16 @@ const quickSendSchema = z.object({
   phone: z.string().min(1, "Phone number is required"),
   templateId: z.string().min(1, "Template is required"),
   parameters: z.string().optional(),
-  mediaUrl: z.string().optional(),
-}).refine((data) => {
-  // No validation needed if no templateId selected
-  if (!data.templateId) return true;
-  
-  // This will be checked in the form component using hasMediaHeader
-  return true;
-}, {
-  message: "Media URL is required for video/image templates",
-  path: ["mediaUrl"],
 });
 
 type QuickSendData = z.infer<typeof quickSendSchema>;
 
 export function QuickSend() {
   const { toast } = useToast();
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [mediaId, setMediaId] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: templates = [] } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
@@ -44,7 +39,42 @@ export function QuickSend() {
       phone: "",
       templateId: "",
       parameters: "",
-      mediaUrl: "",
+    },
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/media/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Upload failed');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setMediaId(data.mediaId);
+      setUploadProgress(null);
+      toast({
+        title: "Media uploaded successfully",
+        description: `File uploaded: ${data.fileName}`,
+      });
+    },
+    onError: (error: any) => {
+      setUploadProgress(null);
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -58,7 +88,7 @@ export function QuickSend() {
         phone: data.phone,
         templateId: data.templateId,
         parameters,
-        mediaUrl: data.mediaUrl,
+        mediaId: mediaId,
       });
       return await res.json();
     },
@@ -78,21 +108,29 @@ export function QuickSend() {
     },
   });
 
-  const onSubmit = (data: QuickSendData) => {
-    // Validate media URL for video/image templates
-    if (hasMediaHeader && !data.mediaUrl?.trim()) {
-      form.setError("mediaUrl", {
-        type: "required",
-        message: "Media URL is required for this template"
-      });
-      return;
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setMediaId(null);
+      setUploadProgress("Ready to upload");
     }
-    
-    // Validate media URL format if provided
-    if (data.mediaUrl?.trim() && !data.mediaUrl.match(/^https?:\/\/.+/)) {
-      form.setError("mediaUrl", {
-        type: "format",
-        message: "Media URL must be a valid HTTPS URL"
+  };
+
+  const handleUpload = () => {
+    if (selectedFile) {
+      setUploadProgress("Uploading...");
+      uploadMutation.mutate(selectedFile);
+    }
+  };
+
+  const onSubmit = (data: QuickSendData) => {
+    // Validate media upload for video/image templates
+    if (hasMediaHeader && !mediaId) {
+      toast({
+        title: "Media required",
+        description: "Please upload a media file for this template",
+        variant: "destructive",
       });
       return;
     }
@@ -103,8 +141,10 @@ export function QuickSend() {
   // Check if selected template has media header
   const selectedTemplate = templates.find(t => t.templateId === form.watch("templateId"));
   const hasMediaHeader = selectedTemplate?.components?.some(c => 
-    c.type === "HEADER" && (c.format === "VIDEO" || c.format === "IMAGE")
+    c.type === "HEADER" && (c.format === "VIDEO" || c.format === "IMAGE" || c.format === "DOCUMENT")
   );
+  
+  const headerFormat = selectedTemplate?.components?.find(c => c.type === "HEADER")?.format;
 
   return (
     <Card className="bg-card border border-border">
@@ -180,25 +220,57 @@ export function QuickSend() {
           </div>
 
           {hasMediaHeader && (
-            <div className="space-y-2">
-              <Label htmlFor="mediaUrl">
-                Media URL ({selectedTemplate?.components?.find(c => c.type === "HEADER")?.format?.toLowerCase()})
-              </Label>
-              <Input
-                id="mediaUrl"
-                type="url"
-                placeholder="https://example.com/video.mp4"
-                data-testid="input-quick-send-media-url"
-                {...form.register("mediaUrl")}
-              />
-              <p className="text-xs text-muted-foreground">
-                Provide a direct URL to the {selectedTemplate?.components?.find(c => c.type === "HEADER")?.format?.toLowerCase()} file. The media must be publicly accessible.
-              </p>
-              {form.formState.errors.mediaUrl && (
-                <p className="text-sm text-destructive" data-testid="error-quick-send-media-url">
-                  {form.formState.errors.mediaUrl.message}
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="mediaFile">
+                  Media File ({selectedTemplate?.components?.find(c => c.type === "HEADER")?.format?.toLowerCase()})
+                </Label>
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    id="mediaFile"
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept={headerFormat === "DOCUMENT" ? ".pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx" : headerFormat === "IMAGE" ? "image/*" : headerFormat === "VIDEO" ? "video/*" : "video/*,image/*,.pdf,.doc,.docx,.txt,.xls,.xlsx,.ppt,.pptx"}
+                    className="file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/80"
+                    data-testid="input-media-file"
+                  />
+                  {selectedFile && !mediaId && (
+                    <Button
+                      type="button"
+                      onClick={handleUpload}
+                      disabled={uploadMutation.isPending}
+                      size="sm"
+                      data-testid="button-upload"
+                    >
+                      {uploadMutation.isPending ? (
+                        <><Zap className="w-4 h-4 mr-2 animate-spin" /> Uploading...</>
+                      ) : (
+                        <><Upload className="w-4 h-4 mr-2" /> Upload</>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {selectedFile && (
+                  <div className="mt-2 text-sm text-muted-foreground flex items-center gap-2">
+                    <FileIcon className="w-4 h-4" />
+                    {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </div>
+                )}
+                {uploadProgress && (
+                  <div className="mt-2 text-sm text-blue-600">
+                    {uploadProgress}
+                  </div>
+                )}
+                {mediaId && (
+                  <div className="mt-2 text-sm text-green-600 flex items-center gap-2">
+                    ✓ Media uploaded successfully (ID: {mediaId.slice(0, 8)}...)
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-2">
+                  Upload a {selectedTemplate?.components?.find(c => c.type === "HEADER")?.format?.toLowerCase()} file. Maximum size: 16MB.
                 </p>
-              )}
+              </div>
             </div>
           )}
 
