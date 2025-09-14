@@ -6,6 +6,11 @@ import {
 import { randomUUID } from "crypto";
 import session, { Store } from "express-session";
 import createMemoryStore from "memorystore";
+import { drizzle } from "drizzle-orm/neon-http";
+import { neon } from "@neondatabase/serverless";
+import { eq } from "drizzle-orm";
+import { users, settings, contacts, templates, campaigns, messages, replies } from "@shared/schema";
+import connectPgSimple from "connect-pg-simple";
 
 const MemoryStore = createMemoryStore(session);
 
@@ -434,4 +439,201 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+// Database storage implementation
+
+class DatabaseStorage implements IStorage {
+  private db: ReturnType<typeof drizzle>;
+  public sessionStore: Store;
+
+  constructor() {
+    if (!process.env.DATABASE_URL) {
+      throw new Error("DATABASE_URL environment variable is required");
+    }
+    
+    const sql = neon(process.env.DATABASE_URL);
+    this.db = drizzle(sql);
+    
+    // Use PostgreSQL session store
+    const pgSession = connectPgSimple(session);
+    this.sessionStore = new pgSession({
+      conString: process.env.DATABASE_URL,
+      tableName: 'session',
+      createTableIfMissing: true
+    });
+  }
+
+  // Users
+  async getUser(id: string): Promise<User | undefined> {
+    const result = await this.db.select().from(users).where(eq(users.id, id));
+    return result[0];
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const result = await this.db.select().from(users).where(eq(users.email, email));
+    return result[0];
+  }
+
+  async createUser(user: InsertUser): Promise<User> {
+    const result = await this.db.insert(users).values(user).returning();
+    return result[0];
+  }
+
+  async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
+    const result = await this.db.update(users).set(updates).where(eq(users.id, id)).returning();
+    return result[0];
+  }
+
+  // Settings
+  async getSettings(): Promise<Settings | undefined> {
+    const result = await this.db.select().from(settings).limit(1);
+    return result[0];
+  }
+
+  async createOrUpdateSettings(settingsData: InsertSettings): Promise<Settings> {
+    const existing = await this.getSettings();
+    if (existing) {
+      const result = await this.db.update(settings).set(settingsData).where(eq(settings.id, existing.id)).returning();
+      return result[0];
+    } else {
+      const result = await this.db.insert(settings).values(settingsData).returning();
+      return result[0];
+    }
+  }
+
+  // Contacts
+  async getContacts(): Promise<Contact[]> {
+    return await this.db.select().from(contacts);
+  }
+
+  async getContact(id: string): Promise<Contact | undefined> {
+    const result = await this.db.select().from(contacts).where(eq(contacts.id, id));
+    return result[0];
+  }
+
+  async createContact(contact: InsertContact): Promise<Contact> {
+    const result = await this.db.insert(contacts).values(contact).returning();
+    return result[0];
+  }
+
+  async updateContact(id: string, updates: Partial<Contact>): Promise<Contact | undefined> {
+    const result = await this.db.update(contacts).set(updates).where(eq(contacts.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteContact(id: string): Promise<boolean> {
+    const result = await this.db.delete(contacts).where(eq(contacts.id, id));
+    return result.rowCount! > 0;
+  }
+
+  async bulkCreateContacts(contactsData: InsertContact[]): Promise<Contact[]> {
+    const result = await this.db.insert(contacts).values(contactsData as any).returning();
+    return result;
+  }
+
+  // Templates
+  async getTemplates(): Promise<Template[]> {
+    return await this.db.select().from(templates);
+  }
+
+  async getTemplate(id: string): Promise<Template | undefined> {
+    const result = await this.db.select().from(templates).where(eq(templates.id, id));
+    return result[0];
+  }
+
+  async createTemplate(template: InsertTemplate): Promise<Template> {
+    const result = await this.db.insert(templates).values(template).returning();
+    return result[0];
+  }
+
+  async updateTemplate(id: string, updates: Partial<Template>): Promise<Template | undefined> {
+    const result = await this.db.update(templates).set(updates).where(eq(templates.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteTemplate(id: string): Promise<boolean> {
+    const result = await this.db.delete(templates).where(eq(templates.id, id));
+    return result.rowCount! > 0;
+  }
+
+  // Campaigns
+  async getCampaigns(): Promise<Campaign[]> {
+    return await this.db.select().from(campaigns);
+  }
+
+  async getCampaign(id: string): Promise<Campaign | undefined> {
+    const result = await this.db.select().from(campaigns).where(eq(campaigns.id, id));
+    return result[0];
+  }
+
+  async createCampaign(campaign: InsertCampaign): Promise<Campaign> {
+    const result = await this.db.insert(campaigns).values(campaign).returning();
+    return result[0];
+  }
+
+  async updateCampaign(id: string, updates: Partial<Campaign>): Promise<Campaign | undefined> {
+    const result = await this.db.update(campaigns).set(updates).where(eq(campaigns.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteCampaign(id: string): Promise<boolean> {
+    const result = await this.db.delete(campaigns).where(eq(campaigns.id, id));
+    return result.rowCount! > 0;
+  }
+
+  // Messages
+  async getMessages(campaignId?: string): Promise<Message[]> {
+    if (campaignId) {
+      return await this.db.select().from(messages).where(eq(messages.campaignId, campaignId));
+    }
+    return await this.db.select().from(messages);
+  }
+
+  async getMessage(id: string): Promise<Message | undefined> {
+    const result = await this.db.select().from(messages).where(eq(messages.id, id));
+    return result[0];
+  }
+
+  async getMessageByWhatsAppId(whatsappMessageId: string): Promise<Message | undefined> {
+    const result = await this.db.select().from(messages).where(eq(messages.whatsappMessageId, whatsappMessageId));
+    return result[0];
+  }
+
+  async createMessage(message: InsertMessage): Promise<Message> {
+    const result = await this.db.insert(messages).values(message).returning();
+    return result[0];
+  }
+
+  async updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined> {
+    const result = await this.db.update(messages).set(updates).where(eq(messages.id, id)).returning();
+    return result[0];
+  }
+
+  // Contact and Template lookups
+  async getContactByPhone(phone: string): Promise<Contact | undefined> {
+    const result = await this.db.select().from(contacts).where(eq(contacts.phone, phone));
+    return result[0];
+  }
+
+  async getTemplateByWhatsAppId(templateId: string): Promise<Template | undefined> {
+    const result = await this.db.select().from(templates).where(eq(templates.templateId, templateId));
+    return result[0];
+  }
+
+  // Replies
+  async getReplies(): Promise<Reply[]> {
+    return await this.db.select().from(replies);
+  }
+
+  async getReply(id: string): Promise<Reply | undefined> {
+    const result = await this.db.select().from(replies).where(eq(replies.id, id));
+    return result[0];
+  }
+
+  async createReply(reply: InsertReply): Promise<Reply> {
+    const result = await this.db.insert(replies).values(reply).returning();
+    return result[0];
+  }
+}
+
+// Use database storage instead of memory storage
+export const storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
