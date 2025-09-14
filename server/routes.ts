@@ -483,6 +483,20 @@ export function registerRoutes(app: Express): Server {
         }
       }
       
+      // Prepare the WhatsApp API payload
+      const whatsappPayload = {
+        messaging_product: "whatsapp",
+        to: phone,
+        type: "template",
+        template: {
+          name: template.templateId, // Use the actual WhatsApp template name
+          language: { code: template.language }, // Use the template's actual language
+          components: components
+        }
+      };
+      
+      console.log("Sending to WhatsApp API:", JSON.stringify(whatsappPayload, null, 2));
+      
       // Send message via WhatsApp API using correct template name and language
       const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
         method: 'POST',
@@ -490,16 +504,7 @@ export function registerRoutes(app: Express): Server {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: phone,
-          type: "template",
-          template: {
-            name: template.templateId, // Use the actual WhatsApp template name
-            language: { code: template.language }, // Use the template's actual language
-            components: components
-          }
-        }),
+        body: JSON.stringify(whatsappPayload),
       });
 
       if (!response.ok) {
