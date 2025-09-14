@@ -4,16 +4,72 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Plus, Play, Pause, Square, Edit, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { CampaignWizard } from "@/components/campaigns/campaign-wizard";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Campaign } from "@shared/schema";
 
 export default function Campaigns() {
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
+  const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
+  const { toast } = useToast();
 
   const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
     queryKey: ["/api/campaigns"],
   });
+
+  const updateCampaignMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Partial<Campaign> }) => {
+      const res = await apiRequest("PUT", `/api/campaigns/${id}`, data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
+      toast({
+        title: "Campaign updated",
+        description: "Campaign has been updated successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEditCampaign = (campaign: Campaign) => {
+    setEditingCampaign(campaign);
+    setShowCampaignWizard(true);
+  };
+
+  const handleStartCampaign = (campaign: Campaign) => {
+    updateCampaignMutation.mutate({
+      id: campaign.id!,
+      data: { status: "running" }
+    });
+  };
+
+  const handlePauseCampaign = (campaign: Campaign) => {
+    updateCampaignMutation.mutate({
+      id: campaign.id!,
+      data: { status: "paused" }
+    });
+  };
+
+  const handleResumeCampaign = (campaign: Campaign) => {
+    updateCampaignMutation.mutate({
+      id: campaign.id!,
+      data: { status: "running" }
+    });
+  };
+
+  const handleCloseCampaignWizard = () => {
+    setShowCampaignWizard(false);
+    setEditingCampaign(null);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -97,22 +153,44 @@ export default function Campaigns() {
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                      <Button size="sm" variant="outline" data-testid={`button-edit-${campaign.id}`}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        onClick={() => handleEditCampaign(campaign)}
+                        data-testid={`button-edit-${campaign.id}`}
+                      >
                         <Edit className="h-3 w-3 mr-1" />
                         Edit
                       </Button>
                       {campaign.status === "running" ? (
-                        <Button size="sm" variant="outline" data-testid={`button-pause-${campaign.id}`}>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => handlePauseCampaign(campaign)}
+                          disabled={updateCampaignMutation.isPending}
+                          data-testid={`button-pause-${campaign.id}`}
+                        >
                           <Pause className="h-3 w-3 mr-1" />
                           Pause
                         </Button>
                       ) : campaign.status === "paused" ? (
-                        <Button size="sm" variant="outline" data-testid={`button-resume-${campaign.id}`}>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          onClick={() => handleResumeCampaign(campaign)}
+                          disabled={updateCampaignMutation.isPending}
+                          data-testid={`button-resume-${campaign.id}`}
+                        >
                           <Play className="h-3 w-3 mr-1" />
                           Resume
                         </Button>
                       ) : campaign.status === "draft" ? (
-                        <Button size="sm" data-testid={`button-start-${campaign.id}`}>
+                        <Button 
+                          size="sm" 
+                          onClick={() => handleStartCampaign(campaign)}
+                          disabled={updateCampaignMutation.isPending}
+                          data-testid={`button-start-${campaign.id}`}
+                        >
                           <Play className="h-3 w-3 mr-1" />
                           Start
                         </Button>
@@ -131,7 +209,10 @@ export default function Campaigns() {
 
       {/* Campaign Wizard Modal */}
       {showCampaignWizard && (
-        <CampaignWizard onClose={() => setShowCampaignWizard(false)} />
+        <CampaignWizard 
+          onClose={handleCloseCampaignWizard} 
+          editingCampaign={editingCampaign}
+        />
       )}
     </div>
   );

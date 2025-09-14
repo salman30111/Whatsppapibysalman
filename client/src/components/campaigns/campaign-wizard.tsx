@@ -10,11 +10,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { insertCampaignSchema, type InsertCampaign, type Template, type Contact } from "@shared/schema";
+import { insertCampaignSchema, type InsertCampaign, type Template, type Contact, type Campaign } from "@shared/schema";
 import { X, Check } from "lucide-react";
 
 interface CampaignWizardProps {
   onClose: () => void;
+  editingCampaign?: Campaign | null;
 }
 
 const steps = [
@@ -23,9 +24,10 @@ const steps = [
   { id: 3, name: "Schedule & Launch", description: "Set timing and launch campaign" },
 ];
 
-export function CampaignWizard({ onClose }: CampaignWizardProps) {
+export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const { toast } = useToast();
+  const isEditing = !!editingCampaign;
 
   const { data: templates = [] } = useQuery<Template[]>({
     queryKey: ["/api/templates"],
@@ -37,7 +39,16 @@ export function CampaignWizard({ onClose }: CampaignWizardProps) {
 
   const form = useForm<InsertCampaign>({
     resolver: zodResolver(insertCampaignSchema),
-    defaultValues: {
+    defaultValues: editingCampaign ? {
+      name: editingCampaign.name,
+      description: editingCampaign.description || "",
+      status: editingCampaign.status,
+      templateId: editingCampaign.templateId || "",
+      contacts: editingCampaign.contacts || [],
+      schedule: editingCampaign.schedule || {
+        type: "immediate",
+      },
+    } : {
       name: "",
       description: "",
       status: "draft",
@@ -49,22 +60,27 @@ export function CampaignWizard({ onClose }: CampaignWizardProps) {
     },
   });
 
-  const createCampaignMutation = useMutation({
+  const saveCampaignMutation = useMutation({
     mutationFn: async (data: InsertCampaign) => {
-      const res = await apiRequest("POST", "/api/campaigns", data);
-      return await res.json();
+      if (isEditing && editingCampaign?.id) {
+        const res = await apiRequest("PUT", `/api/campaigns/${editingCampaign.id}`, data);
+        return await res.json();
+      } else {
+        const res = await apiRequest("POST", "/api/campaigns", data);
+        return await res.json();
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
       toast({
-        title: "Campaign created",
-        description: "Your campaign has been created successfully.",
+        title: isEditing ? "Campaign updated" : "Campaign created",
+        description: `Your campaign has been ${isEditing ? "updated" : "created"} successfully.`,
       });
       onClose();
     },
     onError: (error) => {
       toast({
-        title: "Failed to create campaign",
+        title: `Failed to ${isEditing ? "update" : "create"} campaign`,
         description: error.message,
         variant: "destructive",
       });
@@ -84,7 +100,7 @@ export function CampaignWizard({ onClose }: CampaignWizardProps) {
   };
 
   const onSubmit = (data: InsertCampaign) => {
-    createCampaignMutation.mutate(data);
+    saveCampaignMutation.mutate(data);
   };
 
   const getStepIcon = (stepNumber: number) => {
@@ -378,10 +394,10 @@ export function CampaignWizard({ onClose }: CampaignWizardProps) {
               ) : (
                 <Button 
                   onClick={form.handleSubmit(onSubmit)}
-                  disabled={createCampaignMutation.isPending}
+                  disabled={saveCampaignMutation.isPending}
                   data-testid="button-create-campaign"
                 >
-                  {createCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
+                  {saveCampaignMutation.isPending ? "Creating..." : "Create Campaign"}
                 </Button>
               )}
             </div>
