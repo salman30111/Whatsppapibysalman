@@ -261,8 +261,29 @@ export function registerRoutes(app: Express): Server {
     try {
       // Validate request body
       const updateData = insertCampaignSchema.partial().parse(req.body);
-      const campaign = await storage.updateCampaign(req.params.id, req.body);
+      const campaign = await storage.updateCampaign(req.params.id, updateData);
       if (!campaign) return res.status(404).json({ message: "Campaign not found" });
+      
+      // Handle campaign scheduling if status is being set to 'scheduled'
+      if (updateData.status === 'scheduled' && campaign.schedule) {
+        const { getCampaignScheduler } = await import('./campaign-scheduler');
+        const scheduler = getCampaignScheduler();
+        
+        if (campaign.schedule.type === 'immediate') {
+          // Execute immediately
+          scheduler.scheduleImmediateCampaign(campaign.id);
+        } else if (campaign.schedule.type === 'scheduled' && campaign.schedule.startTime) {
+          // Schedule for specific time
+          scheduler.scheduleCampaign(campaign.id, new Date(campaign.schedule.startTime));
+        } else if (campaign.schedule.type === 'recurring' && campaign.schedule.recurrence && campaign.schedule.recurrence !== 'none') {
+          // Schedule recurring campaign
+          scheduler.scheduleRecurringCampaign(
+            campaign.id, 
+            campaign.schedule.recurrence, 
+            campaign.schedule.startTime ? new Date(campaign.schedule.startTime) : undefined
+          );
+        }
+      }
       
       // Send notification for campaign status change
       if (updateData.status && req.user?.id) {
@@ -294,6 +315,95 @@ export function registerRoutes(app: Express): Server {
       }
       
       res.status(400).json({ message: "Failed to update campaign" });
+    }
+  });
+
+  // Campaign execution routes
+  app.post("/api/campaigns/:id/execute", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const campaign = await storage.getCampaign(req.params.id);
+      if (!campaign) return res.status(404).json({ message: "Campaign not found" });
+      
+      const { getCampaignScheduler } = await import('./campaign-scheduler');
+      const scheduler = getCampaignScheduler();
+      
+      // Execute campaign immediately
+      await scheduler.scheduleImmediateCampaign(campaign.id);
+      
+      res.json({ message: "Campaign execution started", campaignId: campaign.id });
+    } catch (error) {
+      console.error('Campaign execution error:', error);
+      res.status(500).json({ message: "Failed to execute campaign" });
+    }
+  });
+
+  app.post("/api/campaigns/:id/pause", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const campaign = await storage.updateCampaign(req.params.id, { status: 'paused' });
+      if (!campaign) return res.status(404).json({ message: "Campaign not found" });
+      
+      // Cancel the scheduled task
+      const { getCampaignScheduler } = await import('./campaign-scheduler');
+      const scheduler = getCampaignScheduler();
+      scheduler.pauseCampaign(campaign.id);
+      
+      // Send notification
+      if (req.user?.id) {
+        try {
+          const notificationService = getNotificationService(app);
+          notificationService.campaignStatusChanged(
+            req.user.id,
+            campaign.name,
+            'paused',
+            campaign.id
+          );
+        } catch (notifError) {
+          console.error('Failed to send pause notification:', notifError);
+        }
+      }
+      
+      res.json(campaign);
+    } catch (error) {
+      console.error('Campaign pause error:', error);
+      res.status(500).json({ message: "Failed to pause campaign" });
+    }
+  });
+
+  app.post("/api/campaigns/:id/stop", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const campaign = await storage.updateCampaign(req.params.id, { status: 'stopped' });
+      if (!campaign) return res.status(404).json({ message: "Campaign not found" });
+      
+      // Cancel the scheduled task permanently
+      const { getCampaignScheduler } = await import('./campaign-scheduler');
+      const scheduler = getCampaignScheduler();
+      scheduler.cancelCampaign(campaign.id);
+      
+      // Send notification
+      if (req.user?.id) {
+        try {
+          const notificationService = getNotificationService(app);
+          notificationService.campaignStatusChanged(
+            req.user.id,
+            campaign.name,
+            'stopped',
+            campaign.id
+          );
+        } catch (notifError) {
+          console.error('Failed to send stop notification:', notifError);
+        }
+      }
+      
+      res.json(campaign);
+    } catch (error) {
+      console.error('Campaign stop error:', error);
+      res.status(500).json({ message: "Failed to stop campaign" });
     }
   });
 
