@@ -45,8 +45,13 @@ export interface IStorage {
   // Messages
   getMessages(campaignId?: string): Promise<Message[]>;
   getMessage(id: string): Promise<Message | undefined>;
+  getMessageByWhatsAppId(whatsappMessageId: string): Promise<Message | undefined>;
   createMessage(message: InsertMessage): Promise<Message>;
   updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined>;
+  
+  // Contact and Template lookups
+  getContactByPhone(phone: string): Promise<Contact | undefined>;
+  getTemplateByWhatsAppId(templateId: string): Promise<Template | undefined>;
 
   // Replies
   getReplies(): Promise<Reply[]>;
@@ -91,8 +96,9 @@ export class MemStorage implements IStorage {
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
     const user: User = { 
-      ...insertUser, 
+      ...insertUser,
       id, 
+      role: insertUser.role || "agent",
       createdAt: new Date(),
       updatedAt: new Date()
     };
@@ -115,7 +121,10 @@ export class MemStorage implements IStorage {
 
   async createOrUpdateSettings(insertSettings: InsertSettings): Promise<Settings> {
     const settings: Settings = {
-      ...insertSettings,
+      phoneNumberId: insertSettings.phoneNumberId ?? null,
+      wabaId: insertSettings.wabaId ?? null,
+      accessToken: insertSettings.accessToken ?? null,
+      createdBy: insertSettings.createdBy ?? null,
       id: this.settings?.id || randomUUID(),
       createdAt: this.settings?.createdAt || new Date(),
       updatedAt: new Date()
@@ -136,7 +145,11 @@ export class MemStorage implements IStorage {
   async createContact(insertContact: InsertContact): Promise<Contact> {
     const id = randomUUID();
     const contact: Contact = {
-      ...insertContact,
+      name: insertContact.name,
+      phone: insertContact.phone,
+      variables: insertContact.variables ?? {},
+      tags: (insertContact.tags ?? []) as string[],
+      groups: (insertContact.groups ?? []) as string[],
       id,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -178,7 +191,11 @@ export class MemStorage implements IStorage {
   async createTemplate(insertTemplate: InsertTemplate): Promise<Template> {
     const id = randomUUID();
     const template: Template = {
-      ...insertTemplate,
+      templateId: insertTemplate.templateId,
+      name: insertTemplate.name,
+      category: insertTemplate.category,
+      language: insertTemplate.language,
+      components: insertTemplate.components ?? [],
       id,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -211,7 +228,13 @@ export class MemStorage implements IStorage {
   async createCampaign(insertCampaign: InsertCampaign): Promise<Campaign> {
     const id = randomUUID();
     const campaign: Campaign = {
-      ...insertCampaign,
+      name: insertCampaign.name,
+      description: insertCampaign.description ?? null,
+      status: insertCampaign.status || "draft",
+      templateId: insertCampaign.templateId ?? null,
+      contacts: (insertCampaign.contacts ?? []) as string[],
+      schedule: (insertCampaign.schedule as any) || { type: "immediate" },
+      createdBy: insertCampaign.createdBy ?? null,
       id,
       createdAt: new Date(),
       updatedAt: new Date()
@@ -245,7 +268,15 @@ export class MemStorage implements IStorage {
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
     const id = randomUUID();
     const message: Message = {
-      ...insertMessage,
+      campaignId: insertMessage.campaignId ?? null,
+      contactId: insertMessage.contactId ?? null,
+      templateId: insertMessage.templateId ?? null,
+      whatsappMessageId: insertMessage.whatsappMessageId ?? null,
+      status: insertMessage.status || "queued",
+      error: insertMessage.error ?? null,
+      sentAt: insertMessage.sentAt ?? null,
+      deliveredAt: insertMessage.deliveredAt ?? null,
+      readAt: insertMessage.readAt ?? null,
       id,
       createdAt: new Date()
     };
@@ -261,6 +292,19 @@ export class MemStorage implements IStorage {
     return updatedMessage;
   }
 
+  async getMessageByWhatsAppId(whatsappMessageId: string): Promise<Message | undefined> {
+    return Array.from(this.messages.values()).find(message => message.whatsappMessageId === whatsappMessageId);
+  }
+
+  // Contact and Template lookups
+  async getContactByPhone(phone: string): Promise<Contact | undefined> {
+    return Array.from(this.contacts.values()).find(contact => contact.phone === phone);
+  }
+
+  async getTemplateByWhatsAppId(templateId: string): Promise<Template | undefined> {
+    return Array.from(this.templates.values()).find(template => template.templateId === templateId);
+  }
+
   // Replies
   async getReplies(): Promise<Reply[]> {
     return Array.from(this.replies.values());
@@ -273,7 +317,13 @@ export class MemStorage implements IStorage {
   async createReply(insertReply: InsertReply): Promise<Reply> {
     const id = randomUUID();
     const reply: Reply = {
-      ...insertReply,
+      contactId: insertReply.contactId ?? null,
+      messageId: insertReply.messageId ?? null,
+      text: insertReply.text ?? null,
+      mediaUrl: insertReply.mediaUrl ?? null,
+      type: insertReply.type,
+      receivedAt: insertReply.receivedAt ?? new Date(),
+      campaignId: insertReply.campaignId ?? null,
       id,
       createdAt: new Date()
     };

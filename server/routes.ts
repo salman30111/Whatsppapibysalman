@@ -354,10 +354,15 @@ export function registerRoutes(app: Express): Server {
 
       const result = await response.json();
       
-      // Log the message
+      // Find contact and template
+      const contact = await storage.getContactByPhone(phone);
+      const template = await storage.getTemplateByWhatsAppId(templateId);
+      
+      // Log the message with WhatsApp message ID
       const messageData = insertMessageSchema.parse({
-        contactId: null, // Would need to find contact by phone
-        templateId: null, // Would need to find template by templateId
+        contactId: contact?.id || null,
+        templateId: template?.id || null,
+        whatsappMessageId: result.messages[0].id,
         status: "sent",
         sentAt: new Date(),
       });
@@ -383,6 +388,20 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Webhook for WhatsApp
+  // Webhook verification endpoint for WhatsApp
+  app.get("/api/webhook/whatsapp", async (req, res) => {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode === "subscribe" && token === process.env.WEBHOOK_VERIFY_TOKEN) {
+      console.log("Webhook verified");
+      res.status(200).send(challenge);
+    } else {
+      res.sendStatus(403);
+    }
+  });
+
   app.post("/api/webhook/whatsapp", async (req, res) => {
     try {
       const { entry } = req.body;
@@ -392,36 +411,97 @@ export function registerRoutes(app: Express): Server {
           if (change.field === 'messages') {
             const { messages, statuses } = change.value;
             
-            // Handle incoming messages
+            // Handle incoming messages (replies)
             if (messages) {
               for (const message of messages) {
-                const replyData = insertReplySchema.parse({
-                  contactId: null, // Would need to find contact by phone
-                  messageId: message.id,
-                  text: message.text?.body || '',
-                  type: message.type,
-                  receivedAt: new Date(message.timestamp * 1000),
-                });
-                
-                await storage.createReply(replyData);
+                try {
+                  // Find contact by sender phone number
+                  const contact = await storage.getContactByPhone(message.from);
+                  
+                  const replyData = insertReplySchema.parse({
+                    contactId: contact?.id || null,
+                    messageId: message.id,
+                    text: message.text?.body || message.caption || '',
+                    mediaUrl: message.image?.link || message.document?.link || message.audio?.link || message.video?.link || null,
+                    type: message.type,
+                    receivedAt: new Date(parseInt(message.timestamp) * 1000),
+                  });
+                  
+                  await storage.createReply(replyData);
+                  
+                  // Send real-time notification for new reply
+                  try {
+                    const notificationService = getNotificationService(app);
+                    if (contact) {
+                      // Notify all users for now - could be more specific based on campaign ownership
+                      notificationService.notifyAll('incoming_reply', {
+                        replyId: replyData.messageId,
+                        contactName: contact.name,
+                        contactPhone: contact.phone,
+                        text: replyData.text,
+                        type: replyData.type,
+                        receivedAt: replyData.receivedAt
+                      });
+                    }
+                  } catch (notifError) {
+                    console.error('Failed to send reply notification:', notifError);
+                  }
+                } catch (replyError) {
+                  console.error('Failed to process incoming message:', replyError);
+                }
               }
             }
             
             // Handle message status updates
             if (statuses) {
               for (const status of statuses) {
-                // Update message status in database
-                // This would require finding the message by WhatsApp message ID
-                // Send delivery notification
                 try {
-                  const notificationService = getNotificationService(app);
-                  notificationService.webhookReceived('user_id_placeholder', 'delivery_status', {
-                    messageId: status.id,
-                    status: status.status,
-                    timestamp: status.timestamp
-                  });
-                } catch (notifError) {
-                  console.error('Failed to send webhook notification:', notifError);
+                  // Find message by WhatsApp message ID
+                  const message = await storage.getMessageByWhatsAppId(status.id);
+                  
+                  if (message) {
+                    // Update message status and timestamps
+                    const updates: Partial<Message> = {
+                      status: status.status as any,
+                    };
+                    
+                    // Set appropriate timestamps based on status
+                    const statusTimestamp = new Date(parseInt(status.timestamp) * 1000);
+                    switch (status.status) {
+                      case 'delivered':
+                        updates.deliveredAt = statusTimestamp;
+                        break;
+                      case 'read':
+                        updates.readAt = statusTimestamp;
+                        if (!message.deliveredAt) {
+                          updates.deliveredAt = statusTimestamp;
+                        }
+                        break;
+                      case 'failed':
+                        updates.error = status.errors?.[0]?.title || 'Message delivery failed';
+                        break;
+                    }
+                    
+                    await storage.updateMessage(message.id, updates);
+                    
+                    // Send real-time notification for delivery status
+                    try {
+                      const notificationService = getNotificationService(app);
+                      notificationService.notifyAll('delivery_status', {
+                        messageId: message.id,
+                        whatsappMessageId: status.id,
+                        status: status.status,
+                        timestamp: statusTimestamp,
+                        campaignId: message.campaignId,
+                        contactId: message.contactId,
+                        error: updates.error
+                      });
+                    } catch (notifError) {
+                      console.error('Failed to send delivery notification:', notifError);
+                    }
+                  }
+                } catch (statusError) {
+                  console.error('Failed to process status update:', statusError);
                 }
               }
             }
@@ -431,22 +511,8 @@ export function registerRoutes(app: Express): Server {
       
       res.sendStatus(200);
     } catch (error) {
+      console.error('Webhook processing failed:', error);
       res.status(500).json({ message: "Webhook processing failed" });
-    }
-  });
-
-  // Webhook verification for WhatsApp
-  app.get("/api/webhook/whatsapp", (req, res) => {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
-    
-    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || 'your_verify_token';
-    
-    if (mode === 'subscribe' && token === verifyToken) {
-      res.status(200).send(challenge);
-    } else {
-      res.sendStatus(403);
     }
   });
 

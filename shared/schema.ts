@@ -68,6 +68,7 @@ export const messages = pgTable("messages", {
   campaignId: varchar("campaign_id").references(() => campaigns.id),
   contactId: varchar("contact_id").references(() => contacts.id),
   templateId: varchar("template_id").references(() => templates.id),
+  whatsappMessageId: text("whatsapp_message_id"),
   status: text("status", { enum: ["queued", "sent", "delivered", "read", "failed"] }).notNull().default("queued"),
   error: text("error"),
   sentAt: timestamp("sent_at"),
