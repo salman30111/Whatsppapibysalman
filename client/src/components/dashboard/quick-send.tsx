@@ -18,6 +18,15 @@ const quickSendSchema = z.object({
   templateId: z.string().min(1, "Template is required"),
   parameters: z.string().optional(),
   mediaUrl: z.string().optional(),
+}).refine((data) => {
+  // No validation needed if no templateId selected
+  if (!data.templateId) return true;
+  
+  // This will be checked in the form component using hasMediaHeader
+  return true;
+}, {
+  message: "Media URL is required for video/image templates",
+  path: ["mediaUrl"],
 });
 
 type QuickSendData = z.infer<typeof quickSendSchema>;
@@ -70,6 +79,24 @@ export function QuickSend() {
   });
 
   const onSubmit = (data: QuickSendData) => {
+    // Validate media URL for video/image templates
+    if (hasMediaHeader && !data.mediaUrl?.trim()) {
+      form.setError("mediaUrl", {
+        type: "required",
+        message: "Media URL is required for this template"
+      });
+      return;
+    }
+    
+    // Validate media URL format if provided
+    if (data.mediaUrl?.trim() && !data.mediaUrl.match(/^https?:\/\/.+/)) {
+      form.setError("mediaUrl", {
+        type: "format",
+        message: "Media URL must be a valid HTTPS URL"
+      });
+      return;
+    }
+    
     sendMessageMutation.mutate(data);
   };
 

@@ -62,21 +62,16 @@ export function registerRoutes(app: Express): Server {
         return res.json(null);
       }
       
-      // Always create a fresh copy to avoid any mutation
+      // Return settings without exposing access token to frontend
       const responseSettings = {
         id: settings.id,
         phoneNumberId: settings.phoneNumberId,
         wabaId: settings.wabaId,
-        accessToken: settings.accessToken,
+        hasAccessToken: !!settings.accessToken, // Only indicate presence, not value
         createdBy: settings.createdBy,
         createdAt: settings.createdAt,
         updatedAt: settings.updatedAt
       };
-      
-      // Decrypt access token only in the response copy
-      if (responseSettings.accessToken) {
-        responseSettings.accessToken = decrypt(responseSettings.accessToken);
-      }
       
       res.json(responseSettings);
     } catch (error) {
@@ -101,12 +96,12 @@ export function registerRoutes(app: Express): Server {
       
       const settings = await storage.createOrUpdateSettings(storageData);
       
-      // Create clean response with decrypted access token
+      // Create response without exposing access token
       const responseSettings = {
         id: settings.id,
         phoneNumberId: settings.phoneNumberId,
         wabaId: settings.wabaId,
-        accessToken: settingsData.accessToken, // Use original unencrypted value for response
+        hasAccessToken: !!settingsData.accessToken, // Only indicate presence
         createdBy: settings.createdBy,
         createdAt: settings.createdAt,
         updatedAt: settings.updatedAt
