@@ -448,13 +448,22 @@ export function registerRoutes(app: Express): Server {
     try {
       const { phone, templateId, parameters } = req.body;
       
+      // Debug logging
+      console.log("Send message request:", { phone, templateId, parameters });
+      
       const settings = await storage.getSettings();
       if (!settings || !settings.accessToken || !settings.phoneNumberId) {
         return res.status(400).json({ message: "WhatsApp API credentials not configured" });
       }
 
+      // Debug: List available templates
+      const allTemplates = await storage.getTemplates();
+      console.log("Available templates:", allTemplates.map(t => ({ id: t.id, templateId: t.templateId, name: t.name })));
+
       // Get the actual template from database using WhatsApp template ID
       const template = await storage.getTemplateByWhatsAppId(templateId);
+      console.log("Found template:", template ? { id: template.id, templateId: template.templateId, name: template.name } : "NOT FOUND");
+      
       if (!template) {
         return res.status(400).json({ message: "Template not found" });
       }
