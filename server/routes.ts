@@ -453,8 +453,8 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "WhatsApp API credentials not configured" });
       }
 
-      // Get the actual template from database to get correct WhatsApp template name and language
-      const template = await storage.getTemplate(templateId);
+      // Get the actual template from database using WhatsApp template ID
+      const template = await storage.getTemplateByWhatsAppId(templateId);
       if (!template) {
         return res.status(400).json({ message: "Template not found" });
       }
