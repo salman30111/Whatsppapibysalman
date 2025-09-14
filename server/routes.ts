@@ -490,6 +490,102 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Chart analytics endpoint
+  app.get("/api/analytics/chart-data", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const period = req.query.period as string || '7days';
+      const messages = await storage.getMessages();
+      
+      // Calculate date range
+      const startDate = new Date();
+      const days = period === '30days' ? 30 : period === '90days' ? 90 : 7;
+      startDate.setDate(startDate.getDate() - days + 1);
+      startDate.setHours(0, 0, 0, 0);
+      
+      // Generate chart data for each day
+      const chartData = [];
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      
+      for (let i = 0; i < days; i++) {
+        const currentDate = new Date(startDate);
+        currentDate.setDate(startDate.getDate() + i);
+        
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(currentDate.getDate() + 1);
+        
+        const dayMessages = messages.filter(m => 
+          m.sentAt && m.sentAt >= currentDate && m.sentAt < nextDate
+        );
+        
+        const sent = dayMessages.length;
+        const delivered = dayMessages.filter(m => 
+          m.status === 'delivered' || m.status === 'read'
+        ).length;
+        const failed = dayMessages.filter(m => 
+          m.status === 'failed'
+        ).length;
+        
+        const dayName = days <= 7 ? dayNames[currentDate.getDay()] : 
+                       `${currentDate.getMonth() + 1}/${currentDate.getDate()}`;
+        
+        chartData.push({
+          name: dayName,
+          sent,
+          delivered,
+          failed
+        });
+      }
+      
+      res.json(chartData);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch chart data" });
+    }
+  });
+
+  // Success rate analytics endpoint
+  app.get("/api/analytics/success-rate", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const messages = await storage.getMessages();
+      
+      const deliveredMessages = messages.filter(m => 
+        m.status === 'delivered' || m.status === 'read'
+      ).length;
+      const failedMessages = messages.filter(m => 
+        m.status === 'failed'
+      ).length;
+      
+      const totalMessages = messages.length;
+      
+      if (totalMessages === 0) {
+        return res.json([
+          { name: 'No Data', value: 100, fill: 'hsl(var(--muted))' }
+        ]);
+      }
+      
+      const deliveredRate = (deliveredMessages / totalMessages) * 100;
+      const failedRate = (failedMessages / totalMessages) * 100;
+      
+      res.json([
+        { 
+          name: 'Delivered', 
+          value: Math.round(deliveredRate * 10) / 10, 
+          fill: 'hsl(var(--chart-2))' 
+        },
+        { 
+          name: 'Failed', 
+          value: Math.round(failedRate * 10) / 10, 
+          fill: 'hsl(var(--destructive))' 
+        }
+      ]);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch success rate data" });
+    }
+  });
+
   const httpServer = createServer(app);
   
   // Set up Socket.IO for real-time notifications

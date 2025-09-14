@@ -3,30 +3,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useQuery } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { BarChart3, PieChart as PieChartIcon } from "lucide-react";
+import { useState } from "react";
 
-// Mock data for charts - in a real app, this would come from the API
-const mockMessageData = [
-  { name: 'Mon', sent: 1200, delivered: 1140, failed: 60 },
-  { name: 'Tue', sent: 1900, delivered: 1805, failed: 95 },
-  { name: 'Wed', sent: 800, delivered: 764, failed: 36 },
-  { name: 'Thu', sent: 2780, delivered: 2634, failed: 146 },
-  { name: 'Fri', sent: 1890, delivered: 1796, failed: 94 },
-  { name: 'Sat', sent: 2390, delivered: 2271, failed: 119 },
-  { name: 'Sun', sent: 3490, delivered: 3316, failed: 174 },
-];
+interface ChartDataPoint {
+  name: string;
+  sent: number;
+  delivered: number;
+  failed: number;
+}
 
-const mockSuccessData = [
-  { name: 'Delivered', value: 94.2, fill: 'hsl(var(--chart-2))' },
-  { name: 'Failed', value: 5.8, fill: 'hsl(var(--destructive))' },
-];
+interface SuccessRateData {
+  name: string;
+  value: number;
+  fill: string;
+}
 
 interface DashboardStats {
   deliveryRate: number;
 }
 
 export function ChartsSection() {
+  const [period, setPeriod] = useState('7days');
+  
   const { data: stats } = useQuery<DashboardStats>({
     queryKey: ["/api/analytics/dashboard"],
+  });
+
+  const { data: chartData = [], isLoading: chartLoading } = useQuery<ChartDataPoint[]>({
+    queryKey: ["/api/analytics/chart-data", { period }],
+  });
+
+  const { data: successData = [], isLoading: successLoading } = useQuery<SuccessRateData[]>({
+    queryKey: ["/api/analytics/success-rate"],
   });
 
   return (
@@ -41,7 +49,7 @@ export function ChartsSection() {
             </CardTitle>
             <CardDescription>Daily message delivery trends</CardDescription>
           </div>
-          <Select defaultValue="7days">
+          <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-32" data-testid="select-message-period">
               <SelectValue />
             </SelectTrigger>
@@ -53,9 +61,18 @@ export function ChartsSection() {
           </Select>
         </CardHeader>
         <CardContent>
-          <div className="h-64" data-testid="message-analytics-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={mockMessageData}>
+          {chartLoading ? (
+            <div className="h-64 flex items-center justify-center">
+              <p className="text-muted-foreground">Loading chart data...</p>
+            </div>
+          ) : chartData.length === 0 ? (
+            <div className="h-64 flex items-center justify-center">
+              <p className="text-muted-foreground">No message data available</p>
+            </div>
+          ) : (
+            <div className="h-64" data-testid="message-analytics-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis 
                   dataKey="name" 
@@ -97,7 +114,8 @@ export function ChartsSection() {
                 />
               </LineChart>
             </ResponsiveContainer>
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -123,22 +141,31 @@ export function ChartsSection() {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="h-64" data-testid="success-rate-chart">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={mockSuccessData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {mockSuccessData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Pie>
+          {successLoading ? (
+            <div className="h-64 flex items-center justify-center">
+              <p className="text-muted-foreground">Loading success rate...</p>
+            </div>
+          ) : successData.length === 0 ? (
+            <div className="h-64 flex items-center justify-center">
+              <p className="text-muted-foreground">No delivery data available</p>
+            </div>
+          ) : (
+            <div className="h-64" data-testid="success-rate-chart">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={successData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={5}
+                    dataKey="value"
+                  >
+                    {successData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill} />
+                    ))}
+                  </Pie>
                 <Tooltip 
                   formatter={(value) => [`${value}%`, 'Rate']}
                   contentStyle={{
@@ -151,9 +178,10 @@ export function ChartsSection() {
               </PieChart>
             </ResponsiveContainer>
           </div>
+          )}
           <div className="text-center mt-4">
             <p className="text-2xl font-bold text-foreground" data-testid="overall-success-rate">
-              {stats?.deliveryRate || 94.2}%
+              {stats?.deliveryRate || 0}%
             </p>
             <p className="text-sm text-muted-foreground">Overall Success Rate</p>
           </div>
