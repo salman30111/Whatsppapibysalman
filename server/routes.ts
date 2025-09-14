@@ -453,9 +453,28 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).json({ message: "WhatsApp API credentials not configured" });
       }
 
+      // Get the actual template from database to get correct WhatsApp template name and language
+      const template = await storage.getTemplate(templateId);
+      if (!template) {
+        return res.status(400).json({ message: "Template not found" });
+      }
+
       const accessToken = decrypt(settings.accessToken);
       
-      // Send message via WhatsApp API
+      // Build template components based on the actual template structure
+      const components = [];
+      if (parameters && parameters.length > 0 && template.components) {
+        // Find body component and add parameters to it
+        const bodyComponent = template.components.find(c => c.type === "BODY");
+        if (bodyComponent) {
+          components.push({
+            type: "body",
+            parameters: parameters.map((param: string) => ({ type: "text", text: param }))
+          });
+        }
+      }
+      
+      // Send message via WhatsApp API using correct template name and language
       const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
         method: 'POST',
         headers: {
@@ -467,14 +486,9 @@ export function registerRoutes(app: Express): Server {
           to: phone,
           type: "template",
           template: {
-            name: templateId,
-            language: { code: "en_US" },
-            components: parameters ? [
-              {
-                type: "body",
-                parameters: parameters.map((param: string) => ({ type: "text", text: param }))
-              }
-            ] : []
+            name: template.templateId, // Use the actual WhatsApp template name
+            language: { code: template.language }, // Use the template's actual language
+            components: components
           }
         }),
       });
@@ -486,14 +500,13 @@ export function registerRoutes(app: Express): Server {
 
       const result = await response.json();
       
-      // Find contact and template
+      // Find contact 
       const contact = await storage.getContactByPhone(phone);
-      const template = await storage.getTemplateByWhatsAppId(templateId);
       
       // Log the message with WhatsApp message ID
       const messageData = insertMessageSchema.parse({
         contactId: contact?.id || null,
-        templateId: template?.id || null,
+        templateId: template.id,
         whatsappMessageId: result.messages[0].id,
         status: "sent",
         sentAt: new Date(),
