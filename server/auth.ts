@@ -29,6 +29,9 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
+// Export session middleware for Socket.IO
+export let sessionMiddleware: any;
+
 export function setupAuth(app: Express) {
   // Validate SESSION_SECRET exists
   if (!process.env.SESSION_SECRET) {
@@ -47,10 +50,13 @@ export function setupAuth(app: Express) {
     cookie: {
       httpOnly: true, // Prevent XSS attacks
       secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: 'strict', // CSRF protection
+      sameSite: 'lax', // CSRF protection - changed to 'lax' for Socket.IO compatibility
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
     },
   };
+
+  // Create session middleware for sharing with Socket.IO
+  sessionMiddleware = session(sessionSettings);
 
   // Rate limiter for login attempts to prevent brute force attacks
   const loginLimiter = rateLimit({
@@ -66,7 +72,7 @@ export function setupAuth(app: Express) {
   });
 
   app.set("trust proxy", 1);
-  app.use(session(sessionSettings));
+  app.use(sessionMiddleware);
   app.use(passport.initialize());
   app.use(passport.session());
 

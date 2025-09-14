@@ -268,9 +268,9 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
                             <label key={contact.id} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded cursor-pointer">
                               <input
                                 type="checkbox"
-                                checked={form.watch("contacts")?.includes(contact.id) || false}
+                                checked={(form.watch("contacts") as string[])?.includes(contact.id) || false}
                                 onChange={(e) => {
-                                  const currentContacts = form.watch("contacts") || [];
+                                  const currentContacts = (form.watch("contacts") as string[]) || [];
                                   if (e.target.checked) {
                                     form.setValue("contacts", [...currentContacts, contact.id]);
                                   } else {

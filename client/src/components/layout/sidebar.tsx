@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, BarChart3, Megaphone, Users, FileText, MessageCircle, ListChecks, Settings, LogOut } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { cn } from "@/lib/utils";
 
 const menuItems = [
@@ -83,15 +84,18 @@ export function Sidebar() {
               </Badge>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={handleLogout}
-            className="text-muted-foreground hover:text-foreground"
-            data-testid="button-logout"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={handleLogout}
+              className="text-muted-foreground hover:text-foreground"
+              data-testid="button-logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </aside>

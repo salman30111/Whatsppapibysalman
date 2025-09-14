@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { Server as SocketServer } from "socket.io";
 import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { 
@@ -7,6 +8,8 @@ import {
   insertMessageSchema, insertReplySchema, insertSettingsSchema 
 } from "@shared/schema";
 import crypto from "crypto";
+import { getNotificationService } from "./notifications";
+import { sessionMiddleware } from "./auth";
 
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || crypto.randomBytes(32);
 const IV_LENGTH = 16;
@@ -256,10 +259,40 @@ export function registerRoutes(app: Express): Server {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {
+      // Validate request body
+      const updateData = insertCampaignSchema.partial().parse(req.body);
       const campaign = await storage.updateCampaign(req.params.id, req.body);
       if (!campaign) return res.status(404).json({ message: "Campaign not found" });
+      
+      // Send notification for campaign status change
+      if (updateData.status && req.user?.id) {
+        try {
+          const notificationService = getNotificationService(app);
+          notificationService.campaignStatusChanged(
+            req.user.id,
+            campaign.name,
+            campaign.status,
+            campaign.id
+          );
+        } catch (notifError) {
+          console.error('Failed to send campaign notification:', notifError);
+        }
+      }
+      
       res.json(campaign);
     } catch (error) {
+      console.error('Campaign update error:', error);
+      
+      // Send error notification
+      if (req.user?.id) {
+        try {
+          const notificationService = getNotificationService(app);
+          notificationService.apiError(req.user.id, 'Update Campaign', error instanceof Error ? error.message : 'Unknown error');
+        } catch (notifError) {
+          console.error('Failed to send error notification:', notifError);
+        }
+      }
+      
       res.status(400).json({ message: "Failed to update campaign" });
     }
   });
@@ -379,6 +412,17 @@ export function registerRoutes(app: Express): Server {
               for (const status of statuses) {
                 // Update message status in database
                 // This would require finding the message by WhatsApp message ID
+                // Send delivery notification
+                try {
+                  const notificationService = getNotificationService(app);
+                  notificationService.webhookReceived('user_id_placeholder', 'delivery_status', {
+                    messageId: status.id,
+                    status: status.status,
+                    timestamp: status.timestamp
+                  });
+                } catch (notifError) {
+                  console.error('Failed to send webhook notification:', notifError);
+                }
               }
             }
           }
@@ -447,5 +491,46 @@ export function registerRoutes(app: Express): Server {
   });
 
   const httpServer = createServer(app);
+  
+  // Set up Socket.IO for real-time notifications
+  const io = new SocketServer(httpServer, {
+    cors: {
+      origin: true,
+      credentials: true
+    }
+  });
+
+  // Share Express session with Socket.IO
+  io.engine.use(sessionMiddleware);
+
+  // Socket.IO authentication middleware
+  io.use((socket, next) => {
+    const req: any = socket.request;
+    console.log('Socket auth check - Cookie:', !!req.headers.cookie, 'SessionID:', req.sessionID, 'Passport:', !!req.session?.passport);
+    const userId = req.session?.passport?.user;
+    if (!userId) {
+      console.log('Socket auth failed: No user in session');
+      return next(new Error('unauthorized'));
+    }
+    (socket as any).userId = userId;
+    socket.join(`user_${userId}`);
+    console.log(`Socket authenticated for user ${userId}`);
+    return next();
+  });
+
+  // Socket.IO connection handling
+  io.on('connection', (socket) => {
+    const userId = (socket as any).userId;
+    console.log(`User ${userId} connected:`, socket.id);
+    socket.emit('authenticated', { userId });
+    
+    socket.on('disconnect', () => {
+      console.log(`User ${userId} disconnected:`, socket.id);
+    });
+  });
+
+  // Make io available globally for notifications
+  (app as any).io = io;
+  
   return httpServer;
 }
