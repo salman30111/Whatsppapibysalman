@@ -485,11 +485,12 @@ export function registerRoutes(app: Express): Server {
         }
         
         // Add header component with media
+        const mediaType = headerComponent.format.toLowerCase();
         components.push({
           type: "header",
           parameters: [{
-            type: headerComponent.format.toLowerCase(),
-            [headerComponent.format.toLowerCase()]: {
+            type: mediaType,
+            [mediaType]: {
               link: mediaUrl
             }
           }]
