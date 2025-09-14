@@ -17,6 +17,7 @@ const quickSendSchema = z.object({
   phone: z.string().min(1, "Phone number is required"),
   templateId: z.string().min(1, "Template is required"),
   parameters: z.string().optional(),
+  mediaUrl: z.string().optional(),
 });
 
 type QuickSendData = z.infer<typeof quickSendSchema>;
@@ -34,6 +35,7 @@ export function QuickSend() {
       phone: "",
       templateId: "",
       parameters: "",
+      mediaUrl: "",
     },
   });
 
@@ -47,6 +49,7 @@ export function QuickSend() {
         phone: data.phone,
         templateId: data.templateId,
         parameters,
+        mediaUrl: data.mediaUrl,
       });
       return await res.json();
     },
@@ -69,6 +72,12 @@ export function QuickSend() {
   const onSubmit = (data: QuickSendData) => {
     sendMessageMutation.mutate(data);
   };
+
+  // Check if selected template has media header
+  const selectedTemplate = templates.find(t => t.templateId === form.watch("templateId"));
+  const hasMediaHeader = selectedTemplate?.components?.some(c => 
+    c.type === "HEADER" && (c.format === "VIDEO" || c.format === "IMAGE")
+  );
 
   return (
     <Card className="bg-card border border-border">
@@ -142,6 +151,29 @@ export function QuickSend() {
               Enter parameters for template placeholders, separated by commas
             </p>
           </div>
+
+          {hasMediaHeader && (
+            <div className="space-y-2">
+              <Label htmlFor="mediaUrl">
+                Media URL ({selectedTemplate?.components?.find(c => c.type === "HEADER")?.format?.toLowerCase()})
+              </Label>
+              <Input
+                id="mediaUrl"
+                type="url"
+                placeholder="https://example.com/video.mp4"
+                data-testid="input-quick-send-media-url"
+                {...form.register("mediaUrl")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Provide a direct URL to the {selectedTemplate?.components?.find(c => c.type === "HEADER")?.format?.toLowerCase()} file. The media must be publicly accessible.
+              </p>
+              {form.formState.errors.mediaUrl && (
+                <p className="text-sm text-destructive" data-testid="error-quick-send-media-url">
+                  {form.formState.errors.mediaUrl.message}
+                </p>
+              )}
+            </div>
+          )}
 
           <Button 
             type="submit" 

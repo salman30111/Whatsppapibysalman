@@ -446,10 +446,10 @@ export function registerRoutes(app: Express): Server {
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {
-      const { phone, templateId, parameters } = req.body;
+      const { phone, templateId, parameters, mediaUrl } = req.body;
       
       // Debug logging
-      console.log("Send message request:", { phone, templateId, parameters });
+      console.log("Send message request:", { phone, templateId, parameters, mediaUrl });
       
       const settings = await storage.getSettings();
       if (!settings || !settings.accessToken || !settings.phoneNumberId) {
@@ -473,17 +473,31 @@ export function registerRoutes(app: Express): Server {
       // Build template components based on the actual template structure
       const components = [];
       
-      // Check if template has header with media
+      // Handle header with media (VIDEO or IMAGE)
       const headerComponent = template.components?.find(c => c.type === "HEADER");
       if (headerComponent && (headerComponent.format === "VIDEO" || headerComponent.format === "IMAGE")) {
         console.log("Template has media header:", headerComponent);
-        return res.status(400).json({ 
-          message: `This template requires ${headerComponent.format.toLowerCase()} media. Media templates are not yet supported in this interface.` 
+        
+        if (!mediaUrl) {
+          return res.status(400).json({ 
+            message: `This template requires a ${headerComponent.format.toLowerCase()} URL. Please provide a media URL.` 
+          });
+        }
+        
+        // Add header component with media
+        components.push({
+          type: "header",
+          parameters: [{
+            type: headerComponent.format.toLowerCase(),
+            [headerComponent.format.toLowerCase()]: {
+              link: mediaUrl
+            }
+          }]
         });
       }
       
+      // Handle body parameters
       if (parameters && parameters.length > 0 && template.components) {
-        // Find body component and add parameters to it
         const bodyComponent = template.components.find(c => c.type === "BODY");
         if (bodyComponent) {
           components.push({
