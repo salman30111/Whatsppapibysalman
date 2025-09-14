@@ -5,10 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Download, Search, Filter, FileText } from "lucide-react";
+import { Search, Filter, FileText } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Message } from "@shared/schema";
+import { ExportDropdown } from "@/components/ui/export-dropdown";
+import { exportData, formatDate, getTimestamp } from "@/lib/export-utils";
 
 export default function Logs() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -36,27 +38,29 @@ export default function Logs() {
     return matchesSearch && matchesStatus;
   });
 
-  const exportLogs = () => {
-    const csvContent = [
-      ["ID", "Campaign ID", "Contact ID", "Status", "Sent At", "Delivered At", "Error"].join(","),
-      ...filteredMessages.map(message => [
-        message.id,
-        message.campaignId || "",
-        message.contactId || "",
-        message.status,
-        message.sentAt ? new Date(message.sentAt).toISOString() : "",
-        message.deliveredAt ? new Date(message.deliveredAt).toISOString() : "",
-        message.error || ""
-      ].join(","))
-    ].join("\n");
-
-    const blob = new Blob([csvContent], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `message-logs-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleExport = (format: 'csv' | 'xlsx') => {
+    const columns = [
+      { key: 'id', label: 'Message ID' },
+      { key: 'campaignId', label: 'Campaign ID' },
+      { key: 'contactId', label: 'Contact ID' },
+      { key: 'status', label: 'Status' },
+      { key: 'sentAt', label: 'Sent At', format: formatDate },
+      { key: 'deliveredAt', label: 'Delivered At', format: formatDate },
+      { key: 'readAt', label: 'Read At', format: formatDate },
+      { key: 'error', label: 'Error Message' }
+    ];
+    
+    try {
+      exportData({
+        filename: `message-logs-${getTimestamp()}`,
+        format,
+        columns,
+        data: filteredMessages,
+        sheetName: 'Message Logs'
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+    }
   };
 
   return (
@@ -71,10 +75,12 @@ export default function Logs() {
               <h2 className="text-2xl font-bold text-foreground" data-testid="page-title">Logs & Reports</h2>
               <p className="text-sm text-muted-foreground">View message logs and campaign reports</p>
             </div>
-            <Button onClick={exportLogs} data-testid="button-export-logs">
-              <Download className="h-4 w-4 mr-2" />
-              Export Logs
-            </Button>
+            <ExportDropdown
+              onExportCSV={() => handleExport('csv')}
+              onExportExcel={() => handleExport('xlsx')}
+              disabled={filteredMessages.length === 0}
+              label="Export Logs"
+            />
           </div>
         </header>
 

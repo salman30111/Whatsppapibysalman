@@ -9,6 +9,8 @@ import { CampaignWizard } from "@/components/campaigns/campaign-wizard";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Campaign } from "@shared/schema";
+import { ExportDropdown } from "@/components/ui/export-dropdown";
+import { exportData, formatDate, formatArray, getTimestamp } from "@/lib/export-utils";
 
 export default function Campaigns() {
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
@@ -71,6 +73,35 @@ export default function Campaigns() {
     setEditingCampaign(null);
   };
 
+  const handleExport = (format: 'csv' | 'xlsx') => {
+    const columns = [
+      { key: 'name', label: 'Campaign Name' },
+      { key: 'description', label: 'Description' },
+      { key: 'status', label: 'Status' },
+      { key: 'contacts', label: 'Contact Count', format: (contacts: string[]) => String(contacts?.length || 0) },
+      { key: 'schedule', label: 'Schedule Type', format: (schedule: any) => schedule?.type || 'immediate' },
+      { key: 'createdAt', label: 'Created At', format: formatDate },
+      { key: 'updatedAt', label: 'Updated At', format: formatDate }
+    ];
+    
+    try {
+      exportData({
+        filename: `campaigns-${getTimestamp()}`,
+        format,
+        columns,
+        data: campaigns,
+        sheetName: 'Campaigns'
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: "Export Failed",
+        description: "There was an error exporting campaign data.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "running": return "bg-chart-2 text-chart-2-foreground";
@@ -103,10 +134,18 @@ export default function Campaigns() {
               <h2 className="text-2xl font-bold text-foreground" data-testid="page-title">Campaigns</h2>
               <p className="text-sm text-muted-foreground">Manage your WhatsApp marketing campaigns</p>
             </div>
-            <Button onClick={() => setShowCampaignWizard(true)} data-testid="button-new-campaign">
-              <Plus className="h-4 w-4 mr-2" />
-              New Campaign
-            </Button>
+            <div className="flex gap-2">
+              <ExportDropdown
+                onExportCSV={() => handleExport('csv')}
+                onExportExcel={() => handleExport('xlsx')}
+                disabled={campaigns.length === 0}
+                label="Export Campaigns"
+              />
+              <Button onClick={() => setShowCampaignWizard(true)} data-testid="button-new-campaign">
+                <Plus className="h-4 w-4 mr-2" />
+                New Campaign
+              </Button>
+            </div>
           </div>
         </header>
 

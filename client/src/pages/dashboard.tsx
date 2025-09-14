@@ -7,9 +7,97 @@ import { Button } from "@/components/ui/button";
 import { Plus, Bell } from "lucide-react";
 import { useState } from "react";
 import { CampaignWizard } from "@/components/campaigns/campaign-wizard";
+import { ExportDropdown } from "@/components/ui/export-dropdown";
+import { exportData, formatDate, getTimestamp } from "@/lib/export-utils";
+import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import type { Campaign, Message, Contact } from "@shared/schema";
 
 export default function Dashboard() {
   const [showCampaignWizard, setShowCampaignWizard] = useState(false);
+  const { toast } = useToast();
+
+  // Fetch analytics data for export
+  const { data: dashboardStats } = useQuery<{
+    totalCampaigns: number;
+    activeCampaigns: number;
+    totalMessages: number;
+    messagesToday: number;
+    totalContacts: number;
+    deliveryRate: number;
+  }>({
+    queryKey: ["/api/analytics/dashboard"],
+  });
+
+  const { data: campaigns = [] } = useQuery<Campaign[]>({
+    queryKey: ["/api/campaigns"],
+  });
+
+  const { data: messages = [] } = useQuery<Message[]>({
+    queryKey: ["/api/messages"],
+  });
+
+  const { data: contacts = [] } = useQuery<Contact[]>({
+    queryKey: ["/api/contacts"],
+  });
+
+  const handleExportAnalytics = (format: 'csv' | 'xlsx') => {
+    const analyticsData = [
+      {
+        metric: 'Total Campaigns',
+        value: dashboardStats?.totalCampaigns || campaigns.length || 0,
+        timestamp: new Date()
+      },
+      {
+        metric: 'Active Campaigns', 
+        value: dashboardStats?.activeCampaigns || campaigns.filter(c => c.status === 'running' || c.status === 'scheduled').length || 0,
+        timestamp: new Date()
+      },
+      {
+        metric: 'Total Messages',
+        value: dashboardStats?.totalMessages || messages.length || 0,
+        timestamp: new Date()
+      },
+      {
+        metric: 'Messages Today',
+        value: dashboardStats?.messagesToday || 0,
+        timestamp: new Date()
+      },
+      {
+        metric: 'Total Contacts',
+        value: dashboardStats?.totalContacts || contacts.length || 0,
+        timestamp: new Date()
+      },
+      {
+        metric: 'Delivery Rate (%)',
+        value: dashboardStats?.deliveryRate || 0,
+        timestamp: new Date()
+      }
+    ];
+
+    const columns = [
+      { key: 'metric', label: 'Metric' },
+      { key: 'value', label: 'Value' },
+      { key: 'timestamp', label: 'Generated At', format: formatDate }
+    ];
+    
+    try {
+      exportData({
+        filename: `analytics-${getTimestamp()}`,
+        format,
+        columns,
+        data: analyticsData,
+        sheetName: 'Analytics'
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: "Export Failed",
+        description: "There was an error exporting analytics data.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -35,6 +123,13 @@ export default function Dashboard() {
                   <span className="absolute top-0 right-0 w-2 h-2 bg-destructive rounded-full" />
                 </Button>
               </div>
+              
+              <ExportDropdown
+                onExportCSV={() => handleExportAnalytics('csv')}
+                onExportExcel={() => handleExportAnalytics('xlsx')}
+                disabled={!dashboardStats}
+                label="Export Analytics"
+              />
               
               <Button 
                 onClick={() => setShowCampaignWizard(true)}

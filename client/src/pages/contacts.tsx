@@ -16,6 +16,8 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import { CSVImportDialog } from "@/components/contacts/csv-import-dialog";
+import { ExportDropdown } from "@/components/ui/export-dropdown";
+import { exportData, formatDate, formatArray, formatObject, formatPhone, getTimestamp } from "@/lib/export-utils";
 
 const contactFormSchema = insertContactSchema.extend({
   tagsString: z.string().optional(),
@@ -106,6 +108,35 @@ export default function Contacts() {
     });
   };
 
+  const handleExport = (format: 'csv' | 'xlsx') => {
+    const columns = [
+      { key: 'name', label: 'Name' },
+      { key: 'phone', label: 'Phone Number', format: formatPhone },
+      { key: 'tags', label: 'Tags', format: formatArray },
+      { key: 'groups', label: 'Groups', format: formatArray },
+      { key: 'variables', label: 'Variables', format: formatObject },
+      { key: 'createdAt', label: 'Created At', format: formatDate },
+      { key: 'updatedAt', label: 'Updated At', format: formatDate }
+    ];
+    
+    try {
+      exportData({
+        filename: `contacts-${getTimestamp()}`,
+        format,
+        columns,
+        data: filteredContacts,
+        sheetName: 'Contacts'
+      });
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: "Export Failed",
+        description: "There was an error exporting contact data.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
@@ -119,6 +150,12 @@ export default function Contacts() {
               <p className="text-sm text-muted-foreground">Manage your WhatsApp contacts and groups</p>
             </div>
             <div className="flex items-center space-x-3">
+              <ExportDropdown
+                onExportCSV={() => handleExport('csv')}
+                onExportExcel={() => handleExport('xlsx')}
+                disabled={filteredContacts.length === 0}
+                label="Export Contacts"
+              />
               <Button 
                 variant="outline" 
                 onClick={() => setShowCSVImportDialog(true)}
