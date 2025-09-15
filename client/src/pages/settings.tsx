@@ -287,14 +287,14 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <Button 
                 onClick={() => runDiagnosticMutation.mutate()}
-                disabled={runDiagnosticMutation.isPending || !settings?.hasAccessToken}
+                disabled={runDiagnosticMutation.isPending || !settings?.accessToken}
                 data-testid="button-run-diagnostic"
               >
                 <Stethoscope className="h-4 w-4 mr-2" />
                 {runDiagnosticMutation.isPending ? "Running Diagnostic..." : "Run Diagnostic"}
               </Button>
 
-              {!settings?.hasAccessToken && (
+              {!settings?.accessToken && (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
