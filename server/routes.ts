@@ -79,6 +79,11 @@ export function registerRoutes(app: Express): Server {
         phoneNumberId: settings.phoneNumberId,
         wabaId: settings.wabaId,
         hasAccessToken: !!settings.accessToken, // Only indicate presence, not value
+        // AI Configuration
+        aiEnabled: settings.aiEnabled,
+        aiModel: settings.aiModel,
+        customModelId: settings.customModelId,
+        aiSystemPrompt: settings.aiSystemPrompt,
         createdBy: settings.createdBy,
         createdAt: settings.createdAt,
         updatedAt: settings.updatedAt
@@ -113,6 +118,11 @@ export function registerRoutes(app: Express): Server {
         phoneNumberId: settings.phoneNumberId,
         wabaId: settings.wabaId,
         hasAccessToken: !!settingsData.accessToken, // Only indicate presence
+        // AI Configuration
+        aiEnabled: settings.aiEnabled,
+        aiModel: settings.aiModel,
+        customModelId: settings.customModelId,
+        aiSystemPrompt: settings.aiSystemPrompt,
         createdBy: settings.createdBy,
         createdAt: settings.createdAt,
         updatedAt: settings.updatedAt

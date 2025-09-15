@@ -16,6 +16,11 @@ interface SettingsResponse {
   phoneNumberId: string | null;
   wabaId: string | null;
   hasAccessToken: boolean; // Instead of exposing actual accessToken
+  // AI Configuration
+  aiEnabled: boolean | null;
+  aiModel: string | null;
+  customModelId: string | null;
+  aiSystemPrompt: string | null;
   createdBy: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
@@ -50,11 +55,19 @@ export default function SettingsPage() {
       phoneNumberId: "",
       wabaId: "",
       accessToken: "",
+      aiEnabled: true,
+      aiModel: "gpt-4o-mini",
+      customModelId: "",
+      aiSystemPrompt: "You are a helpful WhatsApp assistant for our business. Provide concise, friendly, and professional responses to customer inquiries. Keep responses brief and relevant to their questions.",
     },
     values: settings ? {
       phoneNumberId: settings.phoneNumberId || "",
       wabaId: settings.wabaId || "",
       accessToken: "", // Don't populate this field for security
+      aiEnabled: settings.aiEnabled ?? true,
+      aiModel: settings.aiModel || "gpt-4o-mini",
+      customModelId: settings.customModelId || "",
+      aiSystemPrompt: settings.aiSystemPrompt || "You are a helpful WhatsApp assistant for our business. Provide concise, friendly, and professional responses to customer inquiries. Keep responses brief and relevant to their questions.",
       createdBy: settings.createdBy,
     } : undefined,
   });
@@ -242,7 +255,8 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <Switch 
-                  defaultChecked={true}
+                  checked={form.watch("aiEnabled") ?? true}
+                  onCheckedChange={(checked) => form.setValue("aiEnabled", checked)}
                   data-testid="switch-ai-enabled"
                 />
               </div>
@@ -250,7 +264,10 @@ export default function SettingsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="aiModel">AI Model</Label>
-                  <Select defaultValue="gpt-5">
+                  <Select 
+                    value={form.watch("aiModel") || "gpt-4o-mini"}
+                    onValueChange={(value) => form.setValue("aiModel", value)}
+                  >
                     <SelectTrigger data-testid="select-ai-model">
                       <SelectValue placeholder="Select AI model" />
                     </SelectTrigger>
@@ -271,7 +288,13 @@ export default function SettingsPage() {
                     id="customModelId"
                     placeholder="ft:gpt-4o-mini-2024-07-18:..."
                     data-testid="input-custom-model-id"
+                    {...form.register("customModelId")}
                   />
+                  {form.formState.errors.customModelId && (
+                    <p className="text-sm text-destructive" data-testid="error-custom-model-id">
+                      {form.formState.errors.customModelId.message}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
                     Enter your fine-tuned model ID if using a custom model
                   </p>
@@ -279,14 +302,19 @@ export default function SettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="systemPrompt">System Prompt</Label>
+                <Label htmlFor="aiSystemPrompt">System Prompt</Label>
                 <Textarea
-                  id="systemPrompt"
+                  id="aiSystemPrompt"
                   placeholder="You are a helpful WhatsApp assistant for our business. Provide concise, friendly, and professional responses to customer inquiries..."
-                  defaultValue="You are a helpful WhatsApp assistant for our business. Provide concise, friendly, and professional responses to customer inquiries. Keep responses brief and relevant to their questions."
                   rows={4}
                   data-testid="textarea-system-prompt"
+                  {...form.register("aiSystemPrompt")}
                 />
+                {form.formState.errors.aiSystemPrompt && (
+                  <p className="text-sm text-destructive" data-testid="error-system-prompt">
+                    {form.formState.errors.aiSystemPrompt.message}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground">
                   This prompt defines how the AI should behave when responding to messages. Be specific about your business context and response style.
                 </p>
@@ -294,12 +322,12 @@ export default function SettingsPage() {
 
               <div className="pt-4">
                 <Button 
-                  type="button"
-                  variant="outline"
+                  type="submit"
+                  disabled={saveSettingsMutation.isPending}
                   data-testid="button-save-ai-settings"
                 >
                   <Save className="h-4 w-4 mr-2" />
-                  Save AI Settings
+                  {saveSettingsMutation.isPending ? "Saving..." : "Save AI Settings"}
                 </Button>
               </div>
             </CardContent>
