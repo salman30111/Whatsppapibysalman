@@ -1,7 +1,7 @@
 import { 
   User, InsertUser, Settings, InsertSettings, Contact, InsertContact,
   Template, InsertTemplate, Campaign, InsertCampaign, Message, InsertMessage,
-  Reply, InsertReply
+  Reply, InsertReply, BotRule, InsertBotRule
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session, { Store } from "express-session";
@@ -9,7 +9,7 @@ import createMemoryStore from "memorystore";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
 import { eq } from "drizzle-orm";
-import { users, settings, contacts, templates, campaigns, messages, replies } from "@shared/schema";
+import { users, settings, contacts, templates, campaigns, messages, replies, botRules } from "@shared/schema";
 import connectPgSimple from "connect-pg-simple";
 
 const MemoryStore = createMemoryStore(session);
@@ -63,6 +63,14 @@ export interface IStorage {
   getReply(id: string): Promise<Reply | undefined>;
   createReply(reply: InsertReply): Promise<Reply>;
 
+  // Bot Rules
+  getBotRules(): Promise<BotRule[]>;
+  getActiveBotRules(): Promise<BotRule[]>;
+  getBotRule(id: string): Promise<BotRule | undefined>;
+  createBotRule(rule: InsertBotRule): Promise<BotRule>;
+  updateBotRule(id: string, updates: Partial<BotRule>): Promise<BotRule | undefined>;
+  deleteBotRule(id: string): Promise<boolean>;
+
   // Session store
   sessionStore: Store;
 }
@@ -75,6 +83,7 @@ export class MemStorage implements IStorage {
   private campaigns: Map<string, Campaign>;
   private messages: Map<string, Message>;
   private replies: Map<string, Reply>;
+  private botRules: Map<string, BotRule>;
   public sessionStore: Store;
 
   constructor() {
@@ -84,6 +93,7 @@ export class MemStorage implements IStorage {
     this.campaigns = new Map();
     this.messages = new Map();
     this.replies = new Map();
+    this.botRules = new Map();
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000,
     });
@@ -380,6 +390,7 @@ export class MemStorage implements IStorage {
       templateId: insertMessage.templateId ?? null,
       whatsappMessageId: insertMessage.whatsappMessageId ?? null,
       status: insertMessage.status || "queued",
+      source: insertMessage.source || "manual",
       error: insertMessage.error ?? null,
       sentAt: insertMessage.sentAt ?? null,
       deliveredAt: insertMessage.deliveredAt ?? null,
@@ -436,6 +447,50 @@ export class MemStorage implements IStorage {
     };
     this.replies.set(id, reply);
     return reply;
+  }
+
+  // Bot Rules
+  async getBotRules(): Promise<BotRule[]> {
+    return Array.from(this.botRules.values());
+  }
+
+  async getActiveBotRules(): Promise<BotRule[]> {
+    return Array.from(this.botRules.values()).filter(rule => rule.active);
+  }
+
+  async getBotRule(id: string): Promise<BotRule | undefined> {
+    return this.botRules.get(id);
+  }
+
+  async createBotRule(insertRule: InsertBotRule): Promise<BotRule> {
+    const id = randomUUID();
+    const rule: BotRule = {
+      name: insertRule.name,
+      triggerType: insertRule.triggerType ?? "exact",
+      triggers: (insertRule.triggers ?? []) as string[],
+      replyType: insertRule.replyType ?? "text",
+      replyContent: (insertRule.replyContent ?? {}) as { text?: string; templateId?: string; mediaUrl?: string; },
+      priority: insertRule.priority ?? 1,
+      active: insertRule.active ?? true,
+      createdBy: insertRule.createdBy ?? null,
+      id,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+    this.botRules.set(id, rule);
+    return rule;
+  }
+
+  async updateBotRule(id: string, updates: Partial<BotRule>): Promise<BotRule | undefined> {
+    const rule = this.botRules.get(id);
+    if (!rule) return undefined;
+    const updatedRule = { ...rule, ...updates, updatedAt: new Date() };
+    this.botRules.set(id, updatedRule);
+    return updatedRule;
+  }
+
+  async deleteBotRule(id: string): Promise<boolean> {
+    return this.botRules.delete(id);
   }
 }
 
@@ -511,7 +566,7 @@ class DatabaseStorage implements IStorage {
   }
 
   async createContact(contact: InsertContact): Promise<Contact> {
-    const result = await this.db.insert(contacts).values(contact).returning();
+    const result = await this.db.insert(contacts).values(contact as any).returning();
     return result[0];
   }
 
@@ -566,7 +621,7 @@ class DatabaseStorage implements IStorage {
   }
 
   async createCampaign(campaign: InsertCampaign): Promise<Campaign> {
-    const result = await this.db.insert(campaigns).values(campaign).returning();
+    const result = await this.db.insert(campaigns).values(campaign as any).returning();
     return result[0];
   }
 
@@ -632,6 +687,35 @@ class DatabaseStorage implements IStorage {
   async createReply(reply: InsertReply): Promise<Reply> {
     const result = await this.db.insert(replies).values(reply).returning();
     return result[0];
+  }
+
+  // Bot Rules
+  async getBotRules(): Promise<BotRule[]> {
+    return await this.db.select().from(botRules);
+  }
+
+  async getActiveBotRules(): Promise<BotRule[]> {
+    return await this.db.select().from(botRules).where(eq(botRules.active, true));
+  }
+
+  async getBotRule(id: string): Promise<BotRule | undefined> {
+    const result = await this.db.select().from(botRules).where(eq(botRules.id, id));
+    return result[0];
+  }
+
+  async createBotRule(rule: InsertBotRule): Promise<BotRule> {
+    const result = await this.db.insert(botRules).values(rule as any).returning();
+    return result[0];
+  }
+
+  async updateBotRule(id: string, updates: Partial<BotRule>): Promise<BotRule | undefined> {
+    const result = await this.db.update(botRules).set(updates).where(eq(botRules.id, id)).returning();
+    return result[0];
+  }
+
+  async deleteBotRule(id: string): Promise<boolean> {
+    const result = await this.db.delete(botRules).where(eq(botRules.id, id));
+    return result.rowCount! > 0;
   }
 }
 
