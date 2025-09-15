@@ -220,16 +220,6 @@ export default function SettingsPage() {
                     </p>
                   </div>
 
-                  <div className="pt-4">
-                    <Button 
-                      type="submit"
-                      disabled={saveSettingsMutation.isPending}
-                      data-testid="button-save-settings"
-                    >
-                      <Save className="h-4 w-4 mr-2" />
-                      {saveSettingsMutation.isPending ? "Saving..." : "Save Settings"}
-                    </Button>
-                  </div>
                 </form>
               )}
             </CardContent>
@@ -246,8 +236,14 @@ export default function SettingsPage() {
                 Configure AI-powered automatic replies using OpenAI. When no bot rules match incoming messages, AI will generate intelligent responses.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
+            <CardContent>
+              {isLoading ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">Loading settings...</p>
+                </div>
+              ) : (
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-base font-medium">Enable AI Auto-Replies</Label>
                   <p className="text-sm text-muted-foreground">
@@ -259,9 +255,9 @@ export default function SettingsPage() {
                   onCheckedChange={(checked) => form.setValue("aiEnabled", checked)}
                   data-testid="switch-ai-enabled"
                 />
-              </div>
+                  </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label htmlFor="aiModel">AI Model</Label>
                   <Select 
@@ -299,9 +295,9 @@ export default function SettingsPage() {
                     Enter your fine-tuned model ID if using a custom model
                   </p>
                 </div>
-              </div>
+                  </div>
 
-              <div className="space-y-2">
+                  <div className="space-y-2">
                 <Label htmlFor="aiSystemPrompt">System Prompt</Label>
                 <Textarea
                   id="aiSystemPrompt"
@@ -318,18 +314,20 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   This prompt defines how the AI should behave when responding to messages. Be specific about your business context and response style.
                 </p>
-              </div>
+                  </div>
 
-              <div className="pt-4">
-                <Button 
-                  type="submit"
-                  disabled={saveSettingsMutation.isPending}
-                  data-testid="button-save-ai-settings"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  {saveSettingsMutation.isPending ? "Saving..." : "Save AI Settings"}
-                </Button>
-              </div>
+                  <div className="pt-4">
+                    <Button 
+                      type="submit"
+                      disabled={saveSettingsMutation.isPending}
+                      data-testid="button-save-ai-settings"
+                    >
+                      <Save className="h-4 w-4 mr-2" />
+                      {saveSettingsMutation.isPending ? "Saving..." : "Save AI Settings"}
+                    </Button>
+                  </div>
+                </form>
+              )}
             </CardContent>
           </Card>
 
