@@ -1,0 +1,89 @@
+Enhance the existing WhatsApp Business API client (Node.js + React + MongoDB) by integrating OpenAI API to handle AI-powered auto-replies.
+
+🔑 Requirements
+1. Webhook Setup
+
+Extend existing Express backend with a /webhook route.
+
+Support Meta verification challenge (GET with hub.verify_token).
+
+Handle incoming messages (POST webhook).
+
+Store messages in MongoDB Replies collection.
+
+2. AI Reply Integration (OpenAI API)
+
+When an incoming message is received:
+
+Extract the text message and sender phone number.
+
+Call OpenAI API (chat/completions) with:
+
+Fine-tuned model if available, else gpt-4o-mini.
+
+System role: "You are a helpful WhatsApp assistant for our business."
+
+User role: actual customer message.
+
+Parse AI response.
+
+Send the AI-generated reply back to the customer via WhatsApp Business Cloud API.
+
+3. Fallback with Bot Rules
+
+If message matches a defined Bot Rule (from BotRules collection), send rule-based reply.
+
+If no rule matches → forward to OpenAI for AI reply.
+
+4. Database Updates
+
+Extend Messages schema with field:
+
+source: { type: String, enum: ["campaign", "manual", "bot", "ai"], default: "manual" }
+
+
+Store AI replies in Messages with source = "ai".
+
+5. Frontend (React + Tailwind)
+
+Add settings page for AI Bot Control:
+
+Toggle AI auto-replies (on/off).
+
+Choose model: gpt-4o-mini or custom fine-tuned model.
+
+Set custom system prompt for AI behavior.
+
+Add dashboard widget showing:
+
+“AI Replies Today”
+
+“Top Queries Answered by AI”
+
+6. Security & Config
+
+Store OPENAI_API_KEY in .env.
+
+Store fine-tuned model ID in settings (MongoDB).
+
+Ensure sensitive data (tokens, API keys) are not exposed to frontend.
+
+📦 Deliverables
+
+Updated Express webhook endpoint with OpenAI integration.
+
+AI reply handler function that:
+
+Receives message → checks Bot Rules → if no match → queries OpenAI → replies via WhatsApp API.
+
+Mongoose schema update for AI replies.
+
+React settings page for AI bot configuration.
+
+Dashboard updates for AI reply statistics.
+
+👉 This will make the chatbot hybrid:
+
+Rule-based for FAQs and campaigns.
+
+AI-powered for dynamic replies using OpenAI API (fine-tuned or standard).

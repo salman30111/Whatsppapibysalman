@@ -14,7 +14,7 @@ run = ["npm", "run", "start"]
 PORT = "5000"
 
 [agent]
-integrations = ["javascript_auth_all_persistance:1.0.0"]
+integrations = ["javascript_auth_all_persistance:1.0.0", "javascript_openai:1.0.0"]
 
 [workflows]
 runButton = "Project"
@@ -50,9 +50,9 @@ localPort = 37117
 externalPort = 3000
 
 [[ports]]
-localPort = 40193
-externalPort = 3003
+localPort = 38557
+externalPort = 3001
 
 [[ports]]
-localPort = 40735
-externalPort = 3001
+localPort = 40193
+externalPort = 3003
