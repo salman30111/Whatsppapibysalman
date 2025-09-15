@@ -565,18 +565,26 @@ export function registerRoutes(app: Express): Server {
 
   // Campaign execution routes
   app.post("/api/campaigns/:id/execute", async (req, res) => {
+    console.log(`Campaign execution endpoint called for campaign: ${req.params.id}`);
     if (!req.isAuthenticated()) return res.sendStatus(401);
     
     try {
       const campaign = await storage.getCampaign(req.params.id);
-      if (!campaign) return res.status(404).json({ message: "Campaign not found" });
+      if (!campaign) {
+        console.log(`Campaign not found: ${req.params.id}`);
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+      
+      console.log(`Campaign found: ${campaign.name}, status: ${campaign.status}`);
       
       const { getCampaignScheduler } = await import('./campaign-scheduler');
       const scheduler = getCampaignScheduler();
       
       // Execute campaign immediately
+      console.log(`Starting immediate execution for campaign: ${campaign.id}`);
       await scheduler.scheduleImmediateCampaign(campaign.id);
       
+      console.log(`Campaign execution completed for: ${campaign.id}`);
       res.json({ message: "Campaign execution started", campaignId: campaign.id });
     } catch (error) {
       console.error('Campaign execution error:', error);

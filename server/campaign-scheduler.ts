@@ -50,8 +50,14 @@ class CampaignSchedulerService implements CampaignScheduler {
   }
 
   async scheduleImmediateCampaign(campaignId: string): Promise<void> {
-    console.log(`Executing immediate campaign: ${campaignId}`);
-    await this.executeCampaign(campaignId);
+    console.log(`[SCHEDULER] Executing immediate campaign: ${campaignId}`);
+    try {
+      await this.executeCampaign(campaignId);
+      console.log(`[SCHEDULER] Campaign execution completed successfully: ${campaignId}`);
+    } catch (error) {
+      console.error(`[SCHEDULER] Campaign execution failed: ${campaignId}`, error);
+      throw error;
+    }
   }
 
   scheduleCampaign(campaignId: string, startTime: Date): void {
@@ -149,11 +155,19 @@ class CampaignSchedulerService implements CampaignScheduler {
 
   private async executeCampaign(campaignId: string): Promise<void> {
     try {
-      console.log(`Executing campaign: ${campaignId}`);
+      console.log(`[EXECUTION] Starting campaign execution: ${campaignId}`);
       
       const campaign = await storage.getCampaign(campaignId);
       if (!campaign) {
-        console.error(`Campaign not found: ${campaignId}`);
+        console.error(`[EXECUTION] Campaign not found: ${campaignId}`);
+        return;
+      }
+      
+      console.log(`[EXECUTION] Campaign found: ${campaign.name}, status: ${campaign.status}, contacts: ${campaign.contacts?.length || 0}`);
+      
+      if (!campaign.contacts || campaign.contacts.length === 0) {
+        console.error(`[EXECUTION] No contacts found for campaign: ${campaignId}`);
+        await storage.updateCampaign(campaignId, { status: 'stopped' });
         return;
       }
 
