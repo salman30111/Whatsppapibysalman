@@ -1,0 +1,117 @@
+Enhance the existing WhatsApp Business API client webapp (Node.js + React + MongoDB) by adding an automated WhatsApp Bot with message triggers.
+
+🔑 Requirements
+1. Trigger Rules Management (Admin Panel)
+
+Add a new section in the dashboard called “Bot Rules”.
+
+Admin/Manager can:
+
+Create/Edit/Delete rules.
+
+Each rule should contain:
+
+Trigger Type: exact match, contains, regex, or starts with.
+
+Trigger Keyword(s): e.g., "price", "hello", "support".
+
+Reply Type: text, template, or media.
+
+Reply Content:
+
+Text reply (simple string).
+
+Template reply (select from stored WhatsApp templates).
+
+Media reply (image, document, video – stored URL or uploaded file).
+
+Priority (in case multiple rules match).
+
+Active/Inactive toggle.
+
+2. Webhook Listener (Incoming Messages)
+
+Extend the existing WhatsApp Webhook endpoint (/webhook) in Express.
+
+When an incoming message is received:
+
+Store it in the Replies collection.
+
+Process the message against active Bot Rules.
+
+Match the incoming text against trigger conditions.
+
+If match found → send automated reply using WhatsApp Business API.
+
+Log the auto-reply in the Messages collection (status = "sent").
+
+3. Bot Processing Logic
+
+Match hierarchy: Exact match > Starts with > Contains > Regex.
+
+If multiple rules match, select highest priority.
+
+Support multiple triggers per rule (e.g., ["hi", "hello", "hey"]).
+
+If no rule matches, do nothing (or send default fallback message if enabled).
+
+4. Database Changes (MongoDB)
+BotRules
+{
+  _id: ObjectId,
+  name: String,
+  triggerType: { type: String, enum: ["exact", "contains", "regex", "startswith"] },
+  triggers: [String], // list of keywords/phrases/regex
+  replyType: { type: String, enum: ["text", "template", "media"], default: "text" },
+  replyContent: {
+    text: String,
+    templateId: ObjectId, // reference to Templates
+    mediaUrl: String
+  },
+  priority: { type: Number, default: 1 },
+  active: { type: Boolean, default: true },
+  createdBy: ObjectId, // reference to Users
+  createdAt: Date,
+  updatedAt: Date
+}
+
+5. Frontend (React + Tailwind)
+
+Add Bot Rules Manager page:
+
+List of rules in table format (name, triggerType, replyType, status).
+
+Form to add/edit rules (select trigger type, add keywords, choose reply type/content).
+
+Toggle active/inactive.
+
+Add quick test panel to simulate incoming messages and see bot reply preview.
+
+6. Logs & Monitoring
+
+Extend Messages collection with a field:
+
+source: { type: String, enum: ["campaign", "manual", "bot"], default: "manual" }
+
+
+Filter messages by source (bot replies vs campaigns).
+
+Show statistics in dashboard:
+
+“Bot Replies Today”
+
+“Top Triggered Rules”
+
+📦 Deliverables
+
+New Mongoose model: BotRules.
+
+Extended webhook handler to detect triggers and auto-reply.
+
+REST APIs for managing Bot Rules.
+
+React UI for Bot Rules management.
+
+Auto-reply functionality integrated with WhatsApp API.
+
+Logs and stats for bot activity in dashboard.
