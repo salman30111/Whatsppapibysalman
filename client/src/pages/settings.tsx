@@ -3,16 +3,28 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Save, Settings as SettingsIcon, Key, Smartphone } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Save, Settings as SettingsIcon, Key, Smartphone, Stethoscope, AlertCircle, CheckCircle, Info } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertSettingsSchema, type Settings, type InsertSettings } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState } from "react";
+
+interface DiagnosticResult {
+  status: 'success' | 'warning' | 'error';
+  message: string;
+  issues: string[];
+  warnings: string[];
+  info: string[];
+  recommendations: string[];
+}
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const [diagnosticResult, setDiagnosticResult] = useState<DiagnosticResult | null>(null);
 
   const { data: settings, isLoading } = useQuery<Settings>({
     queryKey: ["/api/settings"],
@@ -48,6 +60,28 @@ export default function SettingsPage() {
     onError: (error) => {
       toast({
         title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const runDiagnosticMutation = useMutation({
+    mutationFn: async (): Promise<DiagnosticResult> => {
+      const res = await apiRequest("GET", "/api/whatsapp/diagnostic");
+      return await res.json();
+    },
+    onSuccess: (result) => {
+      setDiagnosticResult(result);
+      toast({
+        title: "Diagnostic completed",
+        description: result.message,
+        variant: result.status === 'error' ? 'destructive' : 'default',
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Diagnostic failed",
         description: error.message,
         variant: "destructive",
       });
@@ -236,6 +270,121 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* WhatsApp Diagnostic */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2" data-testid="diagnostic-title">
+                <Stethoscope className="h-5 w-5" />
+                WhatsApp Configuration Diagnostic
+              </CardTitle>
+              <CardDescription>
+                Run this diagnostic to check your WhatsApp Business API configuration and identify any issues
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button 
+                onClick={() => runDiagnosticMutation.mutate()}
+                disabled={runDiagnosticMutation.isPending || !settings?.hasAccessToken}
+                data-testid="button-run-diagnostic"
+              >
+                <Stethoscope className="h-4 w-4 mr-2" />
+                {runDiagnosticMutation.isPending ? "Running Diagnostic..." : "Run Diagnostic"}
+              </Button>
+
+              {!settings?.hasAccessToken && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Save your WhatsApp API settings first to run the diagnostic
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {diagnosticResult && (
+                <div className="space-y-4">
+                  <Alert variant={diagnosticResult.status === 'error' ? 'destructive' : 'default'}>
+                    {diagnosticResult.status === 'error' ? (
+                      <AlertCircle className="h-4 w-4" />
+                    ) : diagnosticResult.status === 'warning' ? (
+                      <AlertCircle className="h-4 w-4" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    <AlertDescription>
+                      <strong>{diagnosticResult.message}</strong>
+                    </AlertDescription>
+                  </Alert>
+
+                  {diagnosticResult.issues.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-destructive flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Issues Found
+                      </h4>
+                      <ul className="space-y-1">
+                        {diagnosticResult.issues.map((issue, index) => (
+                          <li key={index} className="text-sm text-destructive flex items-start gap-2">
+                            <span className="w-1 h-1 bg-destructive rounded-full mt-2 flex-shrink-0" />
+                            {issue}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {diagnosticResult.warnings.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-orange-600 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4" />
+                        Warnings
+                      </h4>
+                      <ul className="space-y-1">
+                        {diagnosticResult.warnings.map((warning, index) => (
+                          <li key={index} className="text-sm text-orange-600 flex items-start gap-2">
+                            <span className="w-1 h-1 bg-orange-600 rounded-full mt-2 flex-shrink-0" />
+                            {warning}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {diagnosticResult.info.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-semibold text-blue-600 flex items-center gap-2">
+                        <Info className="h-4 w-4" />
+                        Configuration Info
+                      </h4>
+                      <ul className="space-y-1">
+                        {diagnosticResult.info.map((info, index) => (
+                          <li key={index} className="text-sm text-blue-600 flex items-start gap-2">
+                            <span className="w-1 h-1 bg-blue-600 rounded-full mt-2 flex-shrink-0" />
+                            {info}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-muted-foreground flex items-center gap-2">
+                      <Info className="h-4 w-4" />
+                      Recommendations
+                    </h4>
+                    <ul className="space-y-1">
+                      {diagnosticResult.recommendations.map((recommendation, index) => (
+                        <li key={index} className="text-sm text-muted-foreground flex items-start gap-2">
+                          <span className="w-1 h-1 bg-muted-foreground rounded-full mt-2 flex-shrink-0" />
+                          {recommendation}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

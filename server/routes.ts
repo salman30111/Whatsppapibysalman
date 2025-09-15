@@ -184,6 +184,111 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // WhatsApp Diagnostic endpoint
+  app.get("/api/whatsapp/diagnostic", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const settings = await storage.getSettings();
+      if (!settings || !settings.accessToken) {
+        return res.json({
+          status: "error",
+          message: "WhatsApp Business API not configured",
+          issues: ["No access token configured"]
+        });
+      }
+
+      const accessToken = decrypt(settings.accessToken);
+      const issues = [];
+      const warnings = [];
+      const info = [];
+
+      // Check phone number verification status
+      try {
+        const phoneResponse = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}?fields=verified_name,display_phone_number,quality_rating,status`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        
+        if (phoneResponse.ok) {
+          const phoneData = await phoneResponse.json();
+          info.push(`Phone Number: ${phoneData.display_phone_number}`);
+          info.push(`Verified Name: ${phoneData.verified_name}`);
+          info.push(`Status: ${phoneData.status}`);
+          info.push(`Quality Rating: ${phoneData.quality_rating || 'Unknown'}`);
+          
+          if (phoneData.status !== 'CONNECTED') {
+            issues.push(`Phone number status is ${phoneData.status}, should be CONNECTED`);
+          }
+        } else {
+          issues.push("Could not verify phone number status - check phone number ID");
+        }
+      } catch (e) {
+        issues.push("Failed to check phone number verification");
+      }
+
+      // Check template approval status
+      try {
+        const templatesResponse = await fetch(`https://graph.facebook.com/v18.0/${settings.wabaId}/message_templates?fields=name,status,language`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        
+        if (templatesResponse.ok) {
+          const templatesData = await templatesResponse.json();
+          const templates = templatesData.data || [];
+          
+          const approvedTemplates = templates.filter((t: any) => t.status === 'APPROVED');
+          const pendingTemplates = templates.filter((t: any) => t.status === 'PENDING');
+          const rejectedTemplates = templates.filter((t: any) => t.status === 'REJECTED');
+          
+          info.push(`Templates: ${approvedTemplates.length} approved, ${pendingTemplates.length} pending, ${rejectedTemplates.length} rejected`);
+          
+          if (approvedTemplates.length === 0) {
+            issues.push("No approved templates found - templates must be approved by WhatsApp before use");
+          }
+          
+          if (pendingTemplates.length > 0) {
+            warnings.push(`${pendingTemplates.length} templates are pending approval`);
+          }
+        } else {
+          issues.push("Could not check template status - check WABA ID");
+        }
+      } catch (e) {
+        issues.push("Failed to check template approval status");
+      }
+
+      // Check webhook configuration
+      const webhookToken = process.env.WEBHOOK_VERIFY_TOKEN;
+      if (!webhookToken) {
+        issues.push("WEBHOOK_VERIFY_TOKEN not configured - webhooks won't work");
+      } else {
+        info.push("Webhook verification token is configured");
+      }
+
+      const status = issues.length > 0 ? "error" : warnings.length > 0 ? "warning" : "success";
+      
+      res.json({
+        status,
+        message: status === "success" ? "WhatsApp configuration looks good" : "Configuration issues found",
+        issues,
+        warnings,
+        info,
+        recommendations: [
+          "Ensure templates are approved in WhatsApp Business Manager",
+          "Verify your phone number is connected and verified",
+          "Configure webhook URL in WhatsApp Business API dashboard",
+          "Test with a small number of recipients first",
+          "Check that recipient phone numbers are properly formatted with country codes"
+        ]
+      });
+    } catch (error) {
+      res.status(500).json({ 
+        status: "error",
+        message: "Failed to run diagnostics",
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   // Templates routes
   app.get("/api/templates", async (req, res) => {
     if (!req.isAuthenticated()) return res.sendStatus(401);
@@ -623,6 +728,8 @@ export function registerRoutes(app: Express): Server {
       };
       
       console.log("Sending to WhatsApp API:", JSON.stringify(whatsappPayload, null, 2));
+      console.log("Using Phone Number ID:", settings.phoneNumberId);
+      console.log("Template language used:", template.language);
       
       // Send message via WhatsApp API using correct template name and language
       const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
@@ -662,6 +769,7 @@ export function registerRoutes(app: Express): Server {
       }
 
       const result = await response.json();
+      console.log("WhatsApp API success response:", result);
       
       // Find contact 
       const contact = await storage.getContactByPhone(phone);
@@ -676,6 +784,14 @@ export function registerRoutes(app: Express): Server {
       });
       
       const message = await storage.createMessage(messageData);
+      
+      console.log("Message logged to database:", {
+        internalId: message.id,
+        whatsappId: result.messages[0].id,
+        template: template.name,
+        phone: phone,
+        status: "sent"
+      });
       
       res.json({ success: true, messageId: result.messages[0].id, logId: message.id });
     } catch (error) {
