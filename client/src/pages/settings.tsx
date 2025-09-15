@@ -9,6 +9,17 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertSettingsSchema, type Settings, type InsertSettings } from "@shared/schema";
+
+// Type for the settings API response (different from database schema for security)
+interface SettingsResponse {
+  id: string;
+  phoneNumberId: string | null;
+  wabaId: string | null;
+  hasAccessToken: boolean; // Instead of exposing actual accessToken
+  createdBy: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState } from "react";
@@ -26,7 +37,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [diagnosticResult, setDiagnosticResult] = useState<DiagnosticResult | null>(null);
 
-  const { data: settings, isLoading } = useQuery<Settings>({
+  const { data: settings, isLoading } = useQuery<SettingsResponse | null>({
     queryKey: ["/api/settings"],
   });
 
@@ -40,7 +51,7 @@ export default function SettingsPage() {
     values: settings ? {
       phoneNumberId: settings.phoneNumberId || "",
       wabaId: settings.wabaId || "",
-      accessToken: settings.accessToken || "",
+      accessToken: "", // Don't populate this field for security
       createdBy: settings.createdBy,
     } : undefined,
   });
@@ -287,14 +298,14 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <Button 
                 onClick={() => runDiagnosticMutation.mutate()}
-                disabled={runDiagnosticMutation.isPending || !settings?.accessToken}
+                disabled={runDiagnosticMutation.isPending || !settings?.hasAccessToken}
                 data-testid="button-run-diagnostic"
               >
                 <Stethoscope className="h-4 w-4 mr-2" />
                 {runDiagnosticMutation.isPending ? "Running Diagnostic..." : "Run Diagnostic"}
               </Button>
 
-              {!settings?.accessToken && (
+              {!settings?.hasAccessToken && (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
