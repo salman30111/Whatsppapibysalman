@@ -107,6 +107,11 @@ export function registerRoutes(app: Express): Server {
         phoneNumberId: settingsData.phoneNumberId,
         wabaId: settingsData.wabaId,
         accessToken: settingsData.accessToken ? encrypt(settingsData.accessToken) : undefined,
+        // AI Configuration
+        aiEnabled: settingsData.aiEnabled,
+        aiModel: settingsData.aiModel,
+        customModelId: settingsData.customModelId,
+        aiSystemPrompt: settingsData.aiSystemPrompt,
         createdBy: req.user!.id
       };
       
@@ -117,7 +122,7 @@ export function registerRoutes(app: Express): Server {
         id: settings.id,
         phoneNumberId: settings.phoneNumberId,
         wabaId: settings.wabaId,
-        hasAccessToken: !!settingsData.accessToken, // Only indicate presence
+        hasAccessToken: !!settings.accessToken, // Only indicate presence
         // AI Configuration
         aiEnabled: settings.aiEnabled,
         aiModel: settings.aiModel,
