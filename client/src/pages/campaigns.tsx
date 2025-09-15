@@ -42,16 +42,34 @@ export default function Campaigns() {
     },
   });
 
+  const executeCampaignMutation = useMutation({
+    mutationFn: async (campaignId: string) => {
+      const res = await apiRequest("POST", `/api/campaigns/${campaignId}/execute`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/campaigns"] });
+      toast({
+        title: "Campaign started",
+        description: "Campaign has started successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleEditCampaign = (campaign: Campaign) => {
     setEditingCampaign(campaign);
     setShowCampaignWizard(true);
   };
 
   const handleStartCampaign = (campaign: Campaign) => {
-    updateCampaignMutation.mutate({
-      id: campaign.id!,
-      data: { status: "running" }
-    });
+    executeCampaignMutation.mutate(campaign.id!);
   };
 
   const handlePauseCampaign = (campaign: Campaign) => {
