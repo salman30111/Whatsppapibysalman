@@ -245,7 +245,7 @@ export default function Campaigns() {
                         <Button 
                           size="sm" 
                           onClick={() => handleStartCampaign(campaign)}
-                          disabled={updateCampaignMutation.isPending}
+                          disabled={executeCampaignMutation.isPending}
                           data-testid={`button-start-${campaign.id}`}
                         >
                           <Play className="h-3 w-3 mr-1" />
