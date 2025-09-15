@@ -70,7 +70,7 @@ export const messages = pgTable("messages", {
   templateId: varchar("template_id").references(() => templates.id),
   whatsappMessageId: text("whatsapp_message_id"),
   status: text("status", { enum: ["queued", "sent", "delivered", "read", "failed"] }).notNull().default("queued"),
-  source: text("source", { enum: ["campaign", "manual", "bot"] }).notNull().default("manual"),
+  source: text("source", { enum: ["campaign", "manual", "bot", "ai"] }).notNull().default("manual"),
   error: text("error"),
   sentAt: timestamp("sent_at"),
   deliveredAt: timestamp("delivered_at"),
