@@ -1118,6 +1118,13 @@ export function registerRoutes(app: Express): Server {
       const totalBotReplies = botMessages.length;
       const activeBotRules = botRules.filter(rule => rule.active).length;
       
+      // AI statistics
+      const aiMessages = messages.filter(m => m.source === 'ai');
+      const aiRepliesToday = aiMessages.filter(m => 
+        m.sentAt && m.sentAt >= today
+      ).length;
+      const totalAiReplies = aiMessages.length;
+      
       res.json({
         messagesToday,
         activeCampaigns,
@@ -1128,7 +1135,10 @@ export function registerRoutes(app: Express): Server {
         // Bot statistics
         botRepliesToday,
         totalBotReplies,
-        activeBotRules
+        activeBotRules,
+        // AI statistics
+        aiRepliesToday,
+        totalAiReplies
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch analytics" });

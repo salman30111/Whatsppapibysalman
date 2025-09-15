@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import type { BotRule, Contact, InsertMessage } from "@shared/schema";
+import { aiProcessor } from "./ai-processor";
 import axios from "axios";
 
 // Bot processing logic for WhatsApp messages
@@ -7,36 +8,53 @@ export class BotProcessor {
   
   /**
    * Process an incoming message and check if it triggers any bot rules
+   * If no rules match, fallback to AI processing
    * Returns the rule that was triggered and the reply that was sent (if any)
    */
   async processMessage(messageText: string, from: string, contact: Contact | null): Promise<{
     ruleTriggered?: BotRule;
     replyContent?: string;
+    aiUsed?: boolean;
     error?: string;
   }> {
     try {
       // Get all active bot rules
       const activeRules = await storage.getActiveBotRules();
       
-      if (activeRules.length === 0) {
-        return {}; // No active rules
+      // Check bot rules first
+      if (activeRules.length > 0) {
+        // Find matching rule using hierarchy: exact > starts with > contains > regex
+        const matchedRule = this.findMatchingRule(messageText.toLowerCase().trim(), activeRules);
+        
+        if (matchedRule) {
+          // Send automated reply using bot rule
+          const replyResult = await this.sendAutomatedReply(matchedRule, from, contact);
+          
+          return {
+            ruleTriggered: matchedRule,
+            replyContent: replyResult.content,
+            aiUsed: false,
+            error: replyResult.error
+          };
+        }
       }
       
-      // Find matching rule using hierarchy: exact > starts with > contains > regex
-      const matchedRule = this.findMatchingRule(messageText.toLowerCase().trim(), activeRules);
+      // No bot rules matched, fallback to AI processing
+      console.log("No bot rules matched, attempting AI fallback...");
+      const aiResult = await aiProcessor.processMessage(messageText, from, contact);
       
-      if (!matchedRule) {
-        return {}; // No rules matched
+      if (aiResult.success) {
+        return {
+          replyContent: aiResult.replyContent,
+          aiUsed: true
+        };
+      } else {
+        // Both bot rules and AI failed, return no response
+        console.log("AI fallback also failed:", aiResult.error);
+        return {
+          error: `No matching bot rules and AI fallback failed: ${aiResult.error}`
+        };
       }
-      
-      // Send automated reply
-      const replyResult = await this.sendAutomatedReply(matchedRule, from, contact);
-      
-      return {
-        ruleTriggered: matchedRule,
-        replyContent: replyResult.content,
-        error: replyResult.error
-      };
       
     } catch (error) {
       console.error("Bot processing error:", error);

@@ -14,6 +14,9 @@ interface DashboardStats {
   botRepliesToday: number;
   totalBotReplies: number;
   activeBotRules: number;
+  // AI statistics
+  aiRepliesToday: number;
+  totalAiReplies: number;
 }
 
 export function StatsCards() {
@@ -104,11 +107,21 @@ export function StatsCards() {
       change: `${stats?.totalBotReplies || 0} total`,
       changeLabel: "all-time replies",
       testId: "stat-active-bot-rules"
+    },
+    {
+      title: "AI Replies Today",
+      value: stats?.aiRepliesToday || 0,
+      icon: Bot,
+      iconBg: "bg-purple-100 dark:bg-purple-900/20",
+      iconColor: "text-purple-600 dark:text-purple-400",
+      change: `${stats?.totalAiReplies || 0} total`,
+      changeLabel: "intelligent responses",
+      testId: "stat-ai-replies-today"
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-7 gap-6">
       {statsData.map((stat) => {
         const Icon = stat.icon;
         return (

@@ -18,6 +18,11 @@ export const settings = pgTable("settings", {
   phoneNumberId: text("phone_number_id"),
   wabaId: text("waba_id"),
   accessToken: text("access_token"),
+  // AI Configuration
+  aiEnabled: boolean("ai_enabled").default(true),
+  aiModel: text("ai_model").default("gpt-4o-mini"),
+  customModelId: text("custom_model_id"),
+  aiSystemPrompt: text("ai_system_prompt").default("You are a helpful WhatsApp assistant for our business. Provide concise, friendly, and professional responses to customer inquiries. Keep responses brief and relevant to their questions."),
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
