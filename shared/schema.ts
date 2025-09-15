@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, json, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, json, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -70,6 +70,7 @@ export const messages = pgTable("messages", {
   templateId: varchar("template_id").references(() => templates.id),
   whatsappMessageId: text("whatsapp_message_id"),
   status: text("status", { enum: ["queued", "sent", "delivered", "read", "failed"] }).notNull().default("queued"),
+  source: text("source", { enum: ["campaign", "manual", "bot"] }).notNull().default("manual"),
   error: text("error"),
   sentAt: timestamp("sent_at"),
   deliveredAt: timestamp("delivered_at"),
@@ -87,6 +88,24 @@ export const replies = pgTable("replies", {
   receivedAt: timestamp("received_at").defaultNow(),
   campaignId: varchar("campaign_id").references(() => campaigns.id),
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const botRules = pgTable("bot_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  triggerType: text("trigger_type", { enum: ["exact", "contains", "regex", "startswith"] }).notNull().default("exact"),
+  triggers: json("triggers").$type<string[]>().notNull().default([]),
+  replyType: text("reply_type", { enum: ["text", "template", "media"] }).notNull().default("text"),
+  replyContent: json("reply_content").$type<{
+    text?: string;
+    templateId?: string;
+    mediaUrl?: string;
+  }>().notNull().default({}),
+  priority: integer("priority").notNull().default(1),
+  active: boolean("active").notNull().default(true),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Insert schemas
@@ -130,6 +149,12 @@ export const insertReplySchema = createInsertSchema(replies).omit({
   createdAt: true,
 });
 
+export const insertBotRuleSchema = createInsertSchema(botRules).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 // Authentication schemas for API validation
 export const registerSchema = z.object({
   name: z.string().min(1, "Name is required").max(100, "Name too long"),
@@ -159,3 +184,5 @@ export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type Reply = typeof replies.$inferSelect;
 export type InsertReply = z.infer<typeof insertReplySchema>;
+export type BotRule = typeof botRules.$inferSelect;
+export type InsertBotRule = z.infer<typeof insertBotRuleSchema>;
