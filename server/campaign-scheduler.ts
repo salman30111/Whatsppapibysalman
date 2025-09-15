@@ -191,6 +191,61 @@ class CampaignSchedulerService implements CampaignScheduler {
             continue;
           }
 
+          // Build template components based on the actual template structure
+          const components = [];
+          
+          // Handle header with media (VIDEO, IMAGE, or DOCUMENT)
+          const headerComponent = template.components?.find(c => c.type === "HEADER");
+          if (headerComponent && (headerComponent.format === "VIDEO" || headerComponent.format === "IMAGE" || headerComponent.format === "DOCUMENT")) {
+            console.log(`Campaign template has media header: ${headerComponent.format}`);
+            
+            if (!campaign.mediaId) {
+              console.error(`Campaign ${campaignId} requires media but no mediaId found`);
+              failureCount++;
+              continue;
+            }
+            
+            // Add header component with media ID
+            const mediaType = headerComponent.format.toLowerCase();
+            components.push({
+              type: "header",
+              parameters: [{
+                type: mediaType,
+                [mediaType]: {
+                  id: campaign.mediaId
+                }
+              }]
+            });
+          }
+          
+          // Handle body parameters (support template variables from contact variables)
+          if (template.components) {
+            const bodyComponent = template.components.find(c => c.type === "BODY");
+            if (bodyComponent && bodyComponent.text) {
+              // Extract variable placeholders from body text
+              const variableMatches = bodyComponent.text.match(/\{\{(\w+)\}\}/g);
+              if (variableMatches && variableMatches.length > 0) {
+                const parameters = variableMatches.map((match: string) => {
+                  const variableName = match.replace(/[{}]/g, '');
+                  // Use contact variable or fallback to placeholder
+                  const value = contact.variables?.[variableName] || `{{${variableName}}}`;
+                  return { type: "text", text: value };
+                });
+                
+                components.push({
+                  type: "body",
+                  parameters
+                });
+              } else if (template.components.filter(c => c.type === 'BODY').length > 0) {
+                // Add empty body component if body exists but no variables
+                components.push({
+                  type: "body",
+                  parameters: []
+                });
+              }
+            }
+          }
+
           // Send message via WhatsApp API
           const response = await fetch(`https://graph.facebook.com/v18.0/${settings.phoneNumberId}/messages`, {
             method: 'POST',
@@ -205,12 +260,7 @@ class CampaignSchedulerService implements CampaignScheduler {
               template: {
                 name: template.templateId,
                 language: { code: "en_US" },
-                components: (template.components || []).filter(c => c.type === 'BODY').length > 0 ? [
-                  {
-                    type: "body",
-                    parameters: [] // TODO: Support template parameters from contact variables
-                  }
-                ] : []
+                components
               }
             }),
           });

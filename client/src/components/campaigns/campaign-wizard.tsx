@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { insertCampaignSchema, type InsertCampaign, type Template, type Contact, type Campaign } from "@shared/schema";
-import { X, Check, Calendar, Clock } from "lucide-react";
+import { X, Check, Calendar, Clock, Upload, FileText, Trash2 } from "lucide-react";
 import { TemplatePreview } from "./template-preview";
 import { ContactSelector } from "./contact-selector";
 
@@ -29,6 +29,10 @@ const steps = [
 
 export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [mediaId, setMediaId] = useState<string | null>(editingCampaign?.mediaId || null);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const isEditing = !!editingCampaign;
 
@@ -47,6 +51,7 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
       description: editingCampaign.description || "",
       status: editingCampaign.status,
       templateId: editingCampaign.templateId || "",
+      mediaId: editingCampaign.mediaId || null,
       contacts: editingCampaign.contacts || [],
       schedule: editingCampaign.schedule || {
         type: "immediate",
@@ -56,10 +61,68 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
       description: "",
       status: "draft",
       templateId: "",
+      mediaId: null,
       contacts: [],
       schedule: {
         type: "immediate",
       },
+    },
+  });
+
+  // Reset media state when template changes
+  useEffect(() => {
+    const templateId = form.watch("templateId");
+    const selectedTemplate = templates.find(t => t.id === templateId);
+    const hasMediaHeader = selectedTemplate?.components?.some(c => 
+      c.type === "HEADER" && (c.format === "VIDEO" || c.format === "IMAGE" || c.format === "DOCUMENT")
+    );
+    
+    // If template doesn't require media, clear any existing media
+    if (!hasMediaHeader && (mediaId || selectedFile)) {
+      setSelectedFile(null);
+      setMediaId(null);
+      form.setValue("mediaId", null);
+      setUploadProgress(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }, [form.watch("templateId"), templates, mediaId, selectedFile, form]);
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch('/api/media/upload', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Upload failed');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setMediaId(data.mediaId);
+      form.setValue("mediaId", data.mediaId);
+      setUploadProgress(null);
+      toast({
+        title: "Media uploaded successfully",
+        description: `File uploaded: ${data.fileName}`,
+      });
+    },
+    onError: (error: any) => {
+      setUploadProgress(null);
+      toast({
+        title: "Upload failed",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -90,13 +153,48 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
     },
   });
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      setMediaId(null);
+      form.setValue("mediaId", null);
+      setUploadProgress("Ready to upload");
+    }
+  };
+
+  const handleUpload = () => {
+    if (selectedFile) {
+      setUploadProgress("Uploading...");
+      uploadMutation.mutate(selectedFile);
+    }
+  };
+
+  const handleRemoveMedia = () => {
+    setSelectedFile(null);
+    setMediaId(null);
+    form.setValue("mediaId", null);
+    setUploadProgress(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const canProceedToNextStep = (): boolean => {
     switch (currentStep) {
       case 1:
         return !!form.watch("name")?.trim();
       case 2:
-        // Allow proceeding without template for testing/demo purposes
-        // In production, you might want to make this stricter
+        // Check if template requires media and media is uploaded
+        const selectedTemplate = templates.find(t => t.id === form.watch("templateId"));
+        const hasMediaHeader = selectedTemplate?.components?.some(c => 
+          c.type === "HEADER" && (c.format === "VIDEO" || c.format === "IMAGE" || c.format === "DOCUMENT")
+        );
+        
+        if (hasMediaHeader && !mediaId) {
+          return false; // Don't allow proceeding if media is required but not uploaded
+        }
+        
         return true;
       case 3:
         return (form.watch("contacts")?.length || 0) > 0;
@@ -274,6 +372,93 @@ export function CampaignWizard({ onClose, editingCampaign }: CampaignWizardProps
                         }
                       </div>
                     </div>
+
+                    {/* Media Upload Section */}
+                    {(() => {
+                      const selectedTemplate = templates.find(t => t.id === form.watch("templateId"));
+                      const hasMediaHeader = selectedTemplate?.components?.some(c => 
+                        c.type === "HEADER" && (c.format === "VIDEO" || c.format === "IMAGE" || c.format === "DOCUMENT")
+                      );
+                      const headerFormat = selectedTemplate?.components?.find(c => c.type === "HEADER")?.format;
+
+                      if (!hasMediaHeader) return null;
+
+                      return (
+                        <div className="space-y-4">
+                          <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border border-blue-200 dark:border-blue-800">
+                            <div className="flex items-center gap-2 mb-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              <h4 className="font-medium text-blue-900 dark:text-blue-100">Media Required</h4>
+                            </div>
+                            <p className="text-sm text-blue-700 dark:text-blue-200">
+                              This template requires a {headerFormat?.toLowerCase()} file. Please upload a media file to proceed.
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label>Upload {headerFormat?.toLowerCase() || 'Media'} File</Label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                ref={fileInputRef}
+                                type="file"
+                                accept={
+                                  headerFormat === "IMAGE" ? "image/*" :
+                                  headerFormat === "VIDEO" ? "video/*" :
+                                  headerFormat === "DOCUMENT" ? ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" :
+                                  "*"
+                                }
+                                onChange={handleFileSelect}
+                                className="flex-1"
+                                data-testid="input-campaign-media"
+                              />
+                              {selectedFile && !mediaId && (
+                                <Button
+                                  type="button"
+                                  onClick={handleUpload}
+                                  disabled={uploadMutation.isPending}
+                                  size="sm"
+                                  data-testid="button-upload-media"
+                                >
+                                  <Upload className="h-4 w-4 mr-2" />
+                                  {uploadMutation.isPending ? "Uploading..." : "Upload"}
+                                </Button>
+                              )}
+                              {mediaId && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={handleRemoveMedia}
+                                  size="sm"
+                                  data-testid="button-remove-media"
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Remove
+                                </Button>
+                              )}
+                            </div>
+                            
+                            {uploadProgress && (
+                              <p className="text-sm text-muted-foreground" data-testid="upload-progress">
+                                {uploadProgress}
+                              </p>
+                            )}
+                            
+                            {mediaId && (
+                              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400" data-testid="media-uploaded">
+                                <Check className="h-4 w-4" />
+                                Media uploaded successfully
+                              </div>
+                            )}
+                            
+                            {hasMediaHeader && !mediaId && (
+                              <p className="text-sm text-destructive" data-testid="media-required-warning">
+                                Please upload a {headerFormat?.toLowerCase()} file to proceed to the next step.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Template Preview */}

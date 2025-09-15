@@ -56,6 +56,7 @@ export const campaigns = pgTable("campaigns", {
   description: text("description"),
   status: text("status", { enum: ["draft", "scheduled", "running", "paused", "completed", "stopped"] }).notNull().default("draft"),
   templateId: varchar("template_id").references(() => templates.id),
+  mediaId: text("media_id"), // WhatsApp media ID for templates with media headers
   contacts: json("contacts").$type<string[]>().default([]),
   schedule: json("schedule").$type<{
     type: "immediate" | "scheduled" | "recurring";
