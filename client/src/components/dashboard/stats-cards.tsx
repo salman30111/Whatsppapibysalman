@@ -1,7 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
-import { Send, Megaphone, CheckCircle, Users, ArrowUp } from "lucide-react";
+import { Send, Megaphone, CheckCircle, Users, Bot, ArrowUp } from "lucide-react";
 
 interface DashboardStats {
   messagesToday: number;
@@ -10,6 +10,10 @@ interface DashboardStats {
   totalContacts: number;
   totalCampaigns: number;
   totalMessages: number;
+  // Bot statistics
+  botRepliesToday: number;
+  totalBotReplies: number;
+  activeBotRules: number;
 }
 
 export function StatsCards() {
@@ -80,11 +84,31 @@ export function StatsCards() {
       change: "+284",
       changeLabel: "this week",
       testId: "stat-total-contacts"
+    },
+    {
+      title: "Bot Replies Today",
+      value: stats?.botRepliesToday || 0,
+      icon: Bot,
+      iconBg: "bg-chart-3/10",
+      iconColor: "text-chart-3",
+      change: `+${stats?.botRepliesToday || 0}`,
+      changeLabel: "automated responses",
+      testId: "stat-bot-replies-today"
+    },
+    {
+      title: "Active Bot Rules",
+      value: stats?.activeBotRules || 0,
+      icon: Bot,
+      iconBg: "bg-chart-5/10",
+      iconColor: "text-chart-5",
+      change: `${stats?.totalBotReplies || 0} total`,
+      changeLabel: "all-time replies",
+      testId: "stat-active-bot-rules"
     }
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
       {statsData.map((stat) => {
         const Icon = stat.icon;
         return (

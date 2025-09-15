@@ -5,7 +5,7 @@ import { storage } from "./storage";
 import { setupAuth } from "./auth";
 import { 
   insertContactSchema, insertTemplateSchema, insertCampaignSchema, 
-  insertMessageSchema, insertReplySchema, insertSettingsSchema,
+  insertMessageSchema, insertReplySchema, insertSettingsSchema, insertBotRuleSchema,
   type Message
 } from "@shared/schema";
 import crypto from "crypto";
@@ -15,6 +15,7 @@ import multer from "multer";
 import FormData from "form-data";
 import axios from "axios";
 import { createReadStream } from "fs";
+import { botProcessor } from "./bot-processor";
 
 // ENCRYPTION_KEY must be set in environment variables for production
 if (!process.env.ENCRYPTION_KEY) {
@@ -811,6 +812,99 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Bot Rules routes
+  app.get("/api/bot-rules", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const rules = await storage.getBotRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching bot rules:", error);
+      res.status(500).json({ message: "Failed to fetch bot rules" });
+    }
+  });
+
+  app.get("/api/bot-rules/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const rule = await storage.getBotRule(req.params.id);
+      if (!rule) {
+        return res.status(404).json({ message: "Bot rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Error fetching bot rule:", error);
+      res.status(500).json({ message: "Failed to fetch bot rule" });
+    }
+  });
+
+  app.post("/api/bot-rules", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const ruleData = insertBotRuleSchema.parse({
+        ...req.body,
+        createdBy: req.user!.id
+      });
+      
+      const rule = await storage.createBotRule(ruleData);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Error creating bot rule:", error);
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+        res.status(400).json({ message: "Invalid bot rule data", errors: (error as any).errors });
+      } else {
+        res.status(500).json({ message: "Failed to create bot rule" });
+      }
+    }
+  });
+
+  app.put("/api/bot-rules/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      // Manually validate update data to avoid typing issues with partial schema
+      const updateData: any = {};
+      if (req.body.name) updateData.name = req.body.name;
+      if (req.body.triggerType) updateData.triggerType = req.body.triggerType;
+      if (req.body.triggers) updateData.triggers = req.body.triggers;
+      if (req.body.replyType) updateData.replyType = req.body.replyType;
+      if (req.body.replyContent) updateData.replyContent = req.body.replyContent;
+      if (typeof req.body.priority === 'number') updateData.priority = req.body.priority;
+      if (typeof req.body.active === 'boolean') updateData.active = req.body.active;
+      
+      const rule = await storage.updateBotRule(req.params.id, updateData);
+      if (!rule) {
+        return res.status(404).json({ message: "Bot rule not found" });
+      }
+      res.json(rule);
+    } catch (error) {
+      console.error("Error updating bot rule:", error);
+      if (error && typeof error === 'object' && 'name' in error && error.name === 'ZodError') {
+        res.status(400).json({ message: "Invalid bot rule data", errors: (error as any).errors });
+      } else {
+        res.status(500).json({ message: "Failed to update bot rule" });
+      }
+    }
+  });
+
+  app.delete("/api/bot-rules/:id", async (req, res) => {
+    if (!req.isAuthenticated()) return res.sendStatus(401);
+    
+    try {
+      const success = await storage.deleteBotRule(req.params.id);
+      if (!success) {
+        return res.status(404).json({ message: "Bot rule not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting bot rule:", error);
+      res.status(500).json({ message: "Failed to delete bot rule" });
+    }
+  });
+
   // Webhook for WhatsApp
   // Webhook verification endpoint for WhatsApp
   app.get("/api/webhook/whatsapp", async (req, res) => {
@@ -852,6 +946,44 @@ export function registerRoutes(app: Express): Server {
                   });
                   
                   await storage.createReply(replyData);
+                  
+                  // Process message for bot triggers
+                  if (message.type === 'text' && replyData.text) {
+                    try {
+                      const botResult = await botProcessor.processMessage(
+                        replyData.text, 
+                        message.from, 
+                        contact || null
+                      );
+                      
+                      if (botResult.ruleTriggered) {
+                        console.log(`Bot rule triggered: ${botResult.ruleTriggered.name} for message: "${replyData.text}"`);
+                        
+                        // Send real-time notification for bot activity
+                        if (contact) {
+                          const notificationService = getNotificationService(app);
+                          notificationService.sendToAll({
+                            type: 'success',
+                            title: 'Bot Auto-Reply Sent',
+                            message: `Bot replied to ${contact.name} with rule "${botResult.ruleTriggered.name}"`,
+                            data: {
+                              contactName: contact.name,
+                              contactPhone: contact.phone,
+                              ruleName: botResult.ruleTriggered.name,
+                              replyContent: botResult.replyContent,
+                              originalMessage: replyData.text
+                            }
+                          });
+                        }
+                      }
+                      
+                      if (botResult.error) {
+                        console.error('Bot processing error:', botResult.error);
+                      }
+                    } catch (botError) {
+                      console.error('Failed to process bot triggers:', botError);
+                    }
+                  }
                   
                   // Send real-time notification for new reply
                   try {
@@ -958,6 +1090,7 @@ export function registerRoutes(app: Express): Server {
       const campaigns = await storage.getCampaigns();
       const messages = await storage.getMessages();
       const contacts = await storage.getContacts();
+      const botRules = await storage.getBotRules();
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -977,13 +1110,25 @@ export function registerRoutes(app: Express): Server {
       const totalMessages = messages.length;
       const deliveryRate = totalMessages > 0 ? (deliveredMessages / totalMessages) * 100 : 0;
       
+      // Bot statistics
+      const botMessages = messages.filter(m => m.source === 'bot');
+      const botRepliesToday = botMessages.filter(m => 
+        m.sentAt && m.sentAt >= today
+      ).length;
+      const totalBotReplies = botMessages.length;
+      const activeBotRules = botRules.filter(rule => rule.active).length;
+      
       res.json({
         messagesToday,
         activeCampaigns,
         deliveryRate: Math.round(deliveryRate * 10) / 10,
         totalContacts: contacts.length,
         totalCampaigns: campaigns.length,
-        totalMessages
+        totalMessages,
+        // Bot statistics
+        botRepliesToday,
+        totalBotReplies,
+        activeBotRules
       });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch analytics" });

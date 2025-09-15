@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, BarChart3, Megaphone, Users, FileText, MessageCircle, ListChecks, Settings, LogOut } from "lucide-react";
+import { MessageSquare, BarChart3, Megaphone, Users, FileText, MessageCircle, Bot, ListChecks, Settings, LogOut } from "lucide-react";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,7 @@ const menuItems = [
   { path: "/contacts", label: "Contacts", icon: Users },
   { path: "/templates", label: "Templates", icon: FileText },
   { path: "/messages", label: "Messages", icon: MessageCircle },
+  { path: "/bot-rules", label: "Bot Rules", icon: Bot },
   { path: "/logs", label: "Logs & Reports", icon: ListChecks },
   { path: "/settings", label: "Settings", icon: Settings },
 ];

@@ -12,6 +12,7 @@ import Campaigns from "@/pages/campaigns";
 import Contacts from "@/pages/contacts";
 import Templates from "@/pages/templates";
 import Messages from "@/pages/messages";
+import BotRules from "@/pages/bot-rules";
 import Logs from "@/pages/logs";
 import Settings from "@/pages/settings";
 import NotFound from "@/pages/not-found";
@@ -24,6 +25,7 @@ function Router() {
       <ProtectedRoute path="/contacts" component={Contacts} />
       <ProtectedRoute path="/templates" component={Templates} />
       <ProtectedRoute path="/messages" component={Messages} />
+      <ProtectedRoute path="/bot-rules" component={BotRules} />
       <ProtectedRoute path="/logs" component={Logs} />
       <ProtectedRoute path="/settings" component={Settings} />
       <Route path="/auth" component={AuthPage} />
