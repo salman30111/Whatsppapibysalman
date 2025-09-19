@@ -272,8 +272,8 @@ class CampaignSchedulerService implements CampaignScheduler {
               to: contact.phone,
               type: "template",
               template: {
-                name: template.templateId,
-                language: { code: "en_US" },
+                name: template.name,
+                language: { code: template.language },
                 components
               }
             }),
