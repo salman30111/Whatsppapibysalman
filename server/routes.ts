@@ -473,6 +473,19 @@ export function registerRoutes(app: Express): Server {
       const campaignData = insertCampaignSchema.parse(req.body);
       campaignData.createdBy = req.user!.id;
       const campaign = await storage.createCampaign(campaignData);
+      
+      // Execute immediate campaigns right after creation
+      if (campaign.schedule?.type === 'immediate') {
+        console.log(`Executing immediate campaign: ${campaign.id}`);
+        const { getCampaignScheduler } = await import('./campaign-scheduler');
+        const scheduler = getCampaignScheduler();
+        
+        // Execute in background without blocking the response
+        scheduler.scheduleImmediateCampaign(campaign.id).catch(error => {
+          console.error(`Failed to execute immediate campaign ${campaign.id}:`, error);
+        });
+      }
+      
       res.status(201).json(campaign);
     } catch (error) {
       res.status(400).json({ message: "Invalid campaign data" });
